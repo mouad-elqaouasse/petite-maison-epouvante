@@ -1,0 +1,27 @@
+# Secrets (dépôt public)
+.env
+.env.*
+*.pem
+*.key
+kubeconfig*
+
+# Build
+target/
+node_modules/
+dist/
+.angular/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Claude Code (paramètres locaux)
+.claude/settings.local.json
+
+# Documents de l'école (non publiables)
+docs/sujet/
+
+# Configuration Claude Code (non publiée)
+CLAUDE.md
+.claude/
