@@ -12,7 +12,7 @@ Périmètre de l'expérience 1 : `docs/cadrage.md` §3, point 1 « Socle K3s ».
 | 1. Installation de K3s (UFW, K3s, kubectl, vérifications) | **Fait** (2026-10-28) |
 | 2. RAM réelle de chaque composant de la stack | **Fait** (2026-10-28), hors JVM Spring Boot (cert-manager mesuré en partie 3) |
 | 3. Traefik + cert-manager + Let's Encrypt (staging puis production) | **Fait** (2026-10-28) |
-| 4. Keycloak (issuer public / JWKS interne) | À faire |
+| 4. Keycloak (issuer public / JWKS interne) | **En cours** (étapes 0 à 7 faites le 2026-10-28) |
 | 5. HPA avec metrics-server (1 → 3 replicas sous charge, RAM consommée) | À faire |
 | 6. Application des NetworkPolicies | À faire |
 
@@ -943,11 +943,302 @@ Constats :
 - Limites : pas de mesure `anon`/`oom_kill` (images distroless) ; renouvellement non testé (pas de réémission forcée
   en production, à cause des quotas) ; HTTP-01 seulement (pas de certificat wildcard, qui exigerait DNS-01).
 
-### Partie 4 — Keycloak
-- Déployer Keycloak et vérifier la séparation **issuer public** (URL HTTPS vue par le navigateur) / **JWKS interne**
-  (clés récupérées par les services à l'intérieur du cluster).
-- `auth.epouvante.menuly-app.com` pointe provisoirement vers whoami (partie 3) : rediriger l'Ingress `whoami-auth`
-  vers Keycloak en gardant le Secret `auth-epouvante-tls` et l'émetteur `letsencrypt-prod`.
+### Partie 4 — Keycloak exposé en HTTPS (en cours)
+Objectifs :
+1. Keycloak en mode production derrière Traefik, avec le certificat HTTPS de la partie 3.
+2. Console d'administration non publique (accessible seulement par tunnel depuis le poste ; `docs/cadrage.md` §1.4.14).
+3. Un realm de test avec un client public (PKCE, Proof Key for Code Exchange) et deux comptes de test (un auteur, un abonné).
+4. Piège **issuer public / JWKS interne** (`docs/cadrage.md` §1.2.9) : un pod du cluster récupère les clés par l'adresse
+   interne et valide un jeton émis pour l'adresse publique.
+5. RAM de Keycloak après ces changements.
+
+#### Méthode et choix (validés avant la première commande)
+- Fichiers (`experimentations/exp1/`) :
+
+| Fichier | Rôle |
+|---|---|
+| `20-keycloak.yaml` (modifié) | `KC_HOSTNAME=https://auth.epouvante.menuly-app.com` (issuer fixe), `KC_HOSTNAME_ADMIN=http://localhost:8180` (console par tunnel), `KC_PROXY_TRUSTED_ADDRESSES=10.42.0.0/16` (en-têtes `X-Forwarded-*` acceptés seulement depuis les pods), suppression de `KC_HOSTNAME_STRICT=false`, `strategy: Recreate` |
+| `70-keycloak-ingress.yaml` | Ingress `keycloak` (seulement `/realms/epouvante-test` et `/resources`), middlewares Traefik de redirection HTTPS et HSTS (ajoutés à l'étape 6) |
+| `71-realm-epouvante-test.json` | Realm : rôles `USER` / `MODERATEUR`, client public `epouvante-front` (flux standard seul, PKCE `S256`, pas d'octroi par mot de passe), audiences `troc-service` et `notification-service`, access token de 5 min, rotation du refresh token, protection contre la force brute, comptes `auteur-test` et `abonne-test` sans mot de passe |
+| `72-configurer-realm.sh` | Crée le realm avec `kcadm.sh` dans le pod ; mots de passe lus dans un Secret et passés par l'entrée standard, jamais affichés |
+| `73-verifier-jetons.sh` | Flux PKCE complet par l'URL publique, cas négatifs, vérification du jeton dans un pod éphémère (`smallstep/step-cli:0.31.0`) |
+
+- **Nouvel Ingress `keycloak`** plutôt que de modifier `whoami-auth` (nom clair dans le manifest), en reprenant le Secret
+  `auth-epouvante-tls` : aucune réémission attendue (quota de 5 certificats identiques par semaine, ADR 0001).
+- **`strategy: Recreate`** : une mise à jour progressive lancerait un deuxième Keycloak de 768Mi avec 1,4 à 1,5 Gio disponibles.
+- **Chemins exposés** : recommandation de Keycloak (guide « Using a reverse proxy ») : `/realms/` et `/resources/` exposés ;
+  `/admin/`, `/realms/master/`, `/health`, `/metrics` internes. Ici, seul le realm de test est exposé.
+- **Vérification du jeton par `step-cli`** (`step crypto jwt verify --jwks --iss --aud`) : image Alpine avec `curl` et
+  `jq`, utilisateur non-root (uid 1000). Le resource server Spring sera testé avec US1a (Testcontainers).
+- **Aucun mot de passe affiché** : mot de passe admin lu dans l'environnement du pod ; mots de passe de test générés sur le
+  VPS (`openssl rand -hex 24`) dans le Secret `keycloak-test-users` ; le mot de passe admin pour la console est récupéré
+  par moi-même, hors de la session Claude Code.
+- Contournement des guillemets supprimés par PowerShell (partie 2, B) : commandes longues placées dans des scripts.
+
+#### Étape 0 — Vérifications préalables (poste local, rien sur le VPS)
+- Options confirmées dans la référence de configuration de Keycloak (version 26.8.1 listée) : `hostname-admin`
+  (`KC_HOSTNAME_ADMIN`), `proxy-trusted-addresses` (`KC_PROXY_TRUSTED_ADDRESSES`, effective seulement avec `proxy-headers`).
+- `step-cli` : `v0.31.0`, publiée le 2026-09-25 ; Dockerfile lu (Docker Desktop arrêté) : Alpine, `bash curl jq`, `USER step`.
+- JSON du realm validé, scripts vérifiés par `bash -n`.
+- Calcul du `code_challenge` PKCE vérifié sur l'exemple de la RFC 7636 (annexe B) : `E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM`.
+  Difficulté : un premier essai avec un vecteur cité de mémoire (faux) a donné une valeur différente ; le vecteur exact
+  a été relu dans le texte de la RFC.
+
+#### Étape 1 — État de départ
+```powershell
+ssh ubuntu@51.178.39.218 'date -u && kubectl -n sandbox get pods,ingress,certificate,certificaterequest && kubectl top nodes && free -h'
+```
+Résultat (15:09:52 UTC) : 6 pods `Running` dans `sandbox`, 0 redémarrage ; Ingress `whoami-auth` et `whoami-epouvante` ;
+certificats `Ready`, seules les demandes `-2` (production) restent (cert-manager ne garde que la dernière).
+```
+vps-c67c8a44   404m   20%   2312Mi   60%
+Mem:           3.7Gi       2.3Gi       131Mi        45Mi       1.7Gi       1.5Gi
+Swap:          2.0Gi        82Mi       1.9Gi
+```
+
+#### Étape 2 — Transfert, Secret des comptes de test, validation côté serveur
+```powershell
+scp experimentations/exp1/20-keycloak.yaml experimentations/exp1/70-keycloak-ingress.yaml experimentations/exp1/71-realm-epouvante-test.json experimentations/exp1/72-configurer-realm.sh experimentations/exp1/73-verifier-jetons.sh ubuntu@51.178.39.218:~/exp1/
+ssh ubuntu@51.178.39.218 'kubectl -n sandbox create secret generic keycloak-test-users --from-literal=AUTEUR_PASSWORD=$(openssl rand -hex 24) --from-literal=ABONNE_PASSWORD=$(openssl rand -hex 24) && kubectl apply --dry-run=server -f ~/exp1/20-keycloak.yaml -f ~/exp1/70-keycloak-ingress.yaml'
+```
+Résultat : empreintes SHA-256 identiques sur le poste et le VPS ; `secret/keycloak-test-users created` (clés
+`ABONNE_PASSWORD`, `AUTEUR_PASSWORD`, valeurs non lues) ; Deployment `configured`, Ingress `created` en `server dry run`.
+Constat : le dry-run accepte l'Ingress `keycloak` alors que `whoami-auth` existe encore (aucun contrôle de conflit d'hôte ou
+de Secret à l'admission) : la suppression préalable de `whoami-auth` reste indispensable.
+
+#### Étape 3 — Keycloak en mode production
+```powershell
+ssh ubuntu@51.178.39.218 'kubectl apply -f ~/exp1/20-keycloak.yaml && for i in $(seq 1 24); do echo --- $(date -u +%T); kubectl -n sandbox get pod -l app=keycloak --no-headers; kubectl -n sandbox top pod -l app=keycloak --no-headers 2>/dev/null; sleep 15; done; kubectl -n sandbox rollout status deploy/keycloak --timeout=60s && kubectl -n sandbox logs deploy/keycloak | grep -i -E hostname\|proxy\|started\|WARN | tail -n 20 && kubectl -n sandbox exec deploy/keycloak -- cat /sys/fs/cgroup/memory.peak /sys/fs/cgroup/memory.events && kubectl top nodes && free -h'
+```
+
+| Heure (UTC) | Âge | Prêt | CPU | RAM |
+|---|---|---|---|---|
+| 15:11:02 | — | ancien pod `Terminating` | 5m | 555Mi |
+| 15:11:33 | 29 s | 0/1 | 985m | 274Mi |
+| 15:12:04 | 61 s | 0/1 | 999m | 518Mi |
+| 15:12:20 | 76 s | 0/1 | 967m | 149Mi |
+| 15:12:51 | 107 s | **1/1** | 982m | 454Mi |
+| 15:13:22 | 138 s | 1/1 | 25m | 484Mi |
+| 15:16:59 | 355 s | 1/1 | 10m | 494Mi |
+
+```
+... Keycloak 26.8.1 on JVM (powered by Quarkus 3.40.1) started in 26.097s. Listening on: http://0.0.0.0:8080.
+    Management interface listening on http://0.0.0.0:9000.
+memory.peak 805306368 (768 Mio = limite) ; low/high/max/oom/oom_kill/oom_group_kill = 0
+vps-c67c8a44   442m   22%   2537Mi   66%
+Mem:           3.7Gi       2.2Gi       166Mi        47Mi       1.7Gi       1.5Gi
+```
+Constats :
+- `Recreate` respecté : l'ancien pod s'arrête avant le démarrage du nouveau, jamais deux Keycloak en même temps.
+- Prêt en **≈ 1 min 47 s** (2 min 36 s en partie 2) ; mêmes deux phases (JVM de construction, puis JVM du serveur) ;
+  CPU à la limite d'1 cœur pendant le démarrage. Même pic à la limite (768 Mio) sans aucun événement mémoire.
+- Avertissements sans gravité : fonctionnalités dépréciées actives par défaut (`identity-brokering-api:v1`,
+  `twitter-broker:v1`), option `shouldAttachRoute` dépréciée, remarque OpenTelemetry.
+- Keycloak 26 n'écrit pas sa configuration de nom d'hôte dans les logs. Contrôle séparé, par l'adresse interne :
+```powershell
+ssh ubuntu@51.178.39.218 'kubectl -n sandbox exec deploy/prometheus -- wget -qO- http://keycloak.sandbox.svc:8080/realms/master/.well-known/openid-configuration | grep -o -E \"issuer\":\"[^\"]*\"'
+```
+```
+"issuer":"https://auth.epouvante.menuly-app.com/realms/master"
+```
+  `KC_HOSTNAME` est appliqué : même interrogé par l'adresse interne, Keycloak annonce l'issuer public.
+
+#### Étape 4 — Realm de test
+```powershell
+ssh ubuntu@51.178.39.218 'bash ~/exp1/72-configurer-realm.sh'
+```
+Résultat : `Created new realm with id 'epouvante-test'` ; réglages relus : `accessTokenLifespan` 300,
+`revokeRefreshToken` true, `refreshTokenMaxReuse` 0, `bruteForceProtected` true, `registrationAllowed` false ;
+client `epouvante-front` public, flux standard seul (implicite et octroi par mot de passe désactivés) ;
+`auteur-test` et `abonne-test` : rôle `USER`, identifiant de type `password`.
+
+Vérification complémentaire (lecture seule) de l'attribut PKCE et des mappers d'audience :
+```
+"pkce.code.challenge.method" : "S256"
+audience-troc-service         : included.custom.audience=troc-service, access.token.claim=true, id.token.claim=false
+audience-notification-service : included.custom.audience=notification-service, access.token.claim=true, id.token.claim=false
+```
+Constats :
+- `kcadm.sh` fonctionne par `http://localhost:8080` dans le pod malgré le nom d'hôte fixé.
+- Difficulté : avec `--fields`, `kcadm.sh` n'affiche le contenu d'un objet imbriqué que si ses sous-champs sont nommés
+  (`attributes(...)`, `config(...)`) ; le premier affichage montrait `attributes : { }`. Affichage du script corrigé.
+- Les comptes importés avec des rôles explicites n'ont pas le rôle composite `default-roles-epouvante-test`
+  (`offline_access`, `uma_authorization`). Sans effet pour le POC.
+
+#### Étape 5 — Bascule de l'Ingress vers Keycloak
+```powershell
+ssh ubuntu@51.178.39.218 'kubectl -n sandbox get secret auth-epouvante-tls -o jsonpath={.metadata.resourceVersion} && echo && kubectl -n sandbox delete ingress whoami-auth && kubectl apply -f ~/exp1/70-keycloak-ingress.yaml && sleep 30 && date -u && kubectl -n sandbox get ingress,certificate,certificaterequest && kubectl -n sandbox get secret auth-epouvante-tls -o jsonpath={.metadata.resourceVersion} && echo && kubectl -n sandbox describe certificate auth-epouvante-tls | grep -E Not\ After\|Renewal\ Time\|Issuer'
+```
+
+| Contrôle (15:26:42 UTC) | Avant | Après |
+|---|---|---|
+| Ingress de `auth.` | `whoami-auth` | `keycloak` |
+| Version du Secret `auth-epouvante-tls` | 4572 | **4572** |
+| Nouvelle `CertificateRequest` pour `auth.` | — | **aucune** |
+| `Not After` / `Renewal Time` | — | 2027-01-26T13:46:10Z / 2026-12-27T13:46:10Z |
+
+Constats :
+- **Aucune réémission** : le `Certificate` recréé par le nouvel Ingress a repris le certificat valide du Secret existant.
+- La demande `auth-epouvante-tls-2` a disparu avec l'ancien `Certificate` (dont elle dépendait) : l'historique des
+  demandes de `auth.` n'est plus visible dans le cluster, il reste dans ce journal (partie 3, étape 5).
+
+#### Étape 6 — Exposition publique (depuis le poste)
+```bash
+for u in /realms/epouvante-test/.well-known/openid-configuration /realms/epouvante-test/protocol/openid-connect/certs /resources/ /realms/master/.well-known/openid-configuration /realms/master/protocol/openid-connect/auth /admin/ /admin/master/console/ /health/ready /metrics /; do printf '%-60s %s\n' "$u" "$(curl -sS -o /dev/null -w '%{http_code}' https://auth.epouvante.menuly-app.com$u)"; done
+echo | openssl s_client -connect auth.epouvante.menuly-app.com:443 -servername auth.epouvante.menuly-app.com 2>/dev/null | openssl x509 -noout -issuer -subject -dates
+```
+
+| Chemin (HTTPS, 15:28:33 UTC) | Code | Répondu par |
+|---|---|---|
+| `/realms/epouvante-test/.well-known/openid-configuration` | 200 | Keycloak |
+| `/realms/epouvante-test/protocol/openid-connect/certs` | 200 | Keycloak |
+| `/resources/` | 404 | (aucun fichier ciblé) |
+| `/realms/master/...` (découverte, autorisation) | 404 | Traefik (`404 page not found`) |
+| `/admin/`, `/admin/master/console/` | 404 | Traefik |
+| `/health/ready`, `/metrics`, `/` | 404 | Traefik |
+
+- Document de découverte public : `issuer`, `authorization_endpoint`, `token_endpoint`, `jwks_uri` en
+  `https://auth.epouvante.menuly-app.com/realms/epouvante-test/...`.
+- Certificat présenté : `CN=YR1` (Let's Encrypt production), `CN=auth.epouvante.menuly-app.com`, jusqu'au 2027-01-26.
+
+**Problème : page de connexion servie en HTTP clair.** Une demande d'autorisation sur `http://auth...` affiche le formulaire
+de connexion (`200`, `kc-form-login`), alors que le realm est en `sslRequired: external`.
+
+1. **Première hypothèse** : Keycloak voit tous les clients sous `10.42.0.1` (adresse source traduite par ServiceLB, constat de
+   la partie 3), une adresse privée qu'il considère comme locale ; `external` n'impose HTTPS qu'aux adresses externes.
+2. **Correction tentée** : realm passé en `sslRequired: all` (JSON et `kcadm.sh update realms/epouvante-test -s sslRequired=all`).
+   Résultat : **aucun changement**, le formulaire est toujours servi en HTTP (`200`).
+3. **Test qui invalide l'hypothèse** : la même demande, envoyée depuis le cluster directement à Keycloak (sans Traefik), en HTTP,
+   puis avec l'en-tête `X-Forwarded-Proto: http`, affiche toujours le formulaire. Avec `all`, l'adresse du client n'entre
+   plus en compte : l'IP privée n'est donc pas la cause.
+4. **Vraie cause** : `KC_HOSTNAME` est une URL complète en `https://`. Keycloak tire alors le schéma de cette URL, pas de la
+   requête : il considère **toute** requête comme HTTPS, et `sslRequired` (quelle que soit sa valeur) ne refuse plus rien.
+   Indice dans la page : le formulaire servi en HTTP envoie ses données à `action="https://auth.epouvante.menuly-app.com/..."`.
+5. **Risque réel** : le mot de passe part bien en HTTPS (adresse du formulaire), mais une page HTTP peut être modifiée en
+   chemin (adresse du formulaire remplacée par un attaquant placé sur le réseau). Le refus du HTTP doit donc se faire avant
+   Keycloak, dans Traefik.
+6. **Correction retenue** : middlewares Traefik sur l'Ingress `keycloak` seulement (`70-keycloak-ingress.yaml`) :
+   `redirectScheme` (`https`, `permanent: true`) et `headers` HSTS (`stsSeconds: 31536000`, sans `includeSubDomains` ni
+   `preload`). `sslRequired: all` est conservé (sans effet aujourd'hui, utile si le nom d'hôte cessait d'être fixe).
+   Version de Traefik lue sur le cluster : `3.7.13`, CRD `middlewares.traefik.io` en `v1alpha1`.
+
+Vérification préalable (après `sslRequired: all`) : le document de découverte et le JWKS restent servis en HTTP par l'adresse
+interne (`HTTP/1.1 200 OK`) : les services pourront lire les clés par `http://keycloak.sandbox.svc:8080`.
+
+Application :
+```powershell
+scp experimentations/exp1/70-keycloak-ingress.yaml ubuntu@51.178.39.218:~/exp1/
+ssh ubuntu@51.178.39.218 'kubectl apply --dry-run=server -f ~/exp1/70-keycloak-ingress.yaml && kubectl apply -f ~/exp1/70-keycloak-ingress.yaml && date -u && kubectl -n sandbox get middlewares.traefik.io,ingress,certificaterequest && kubectl -n sandbox get secret auth-epouvante-tls -o jsonpath={.metadata.resourceVersion}'
+```
+Résultat (15:35:08 UTC) : deux `Middleware` créés, Ingress `configured`, aucune nouvelle `CertificateRequest`, Secret
+toujours en version 4572.
+
+Vérification depuis le poste (15:35:24 UTC) :
+
+| Requête | Résultat |
+|---|---|
+| `GET http://auth.../realms/epouvante-test/protocol/openid-connect/auth?...` | **301** vers la même URL en `https://` (paramètres conservés) |
+| `GET http://auth.../.well-known/openid-configuration` | **301** vers `https://`, sans en-tête `Strict-Transport-Security` |
+| `POST http://auth.../protocol/openid-connect/token` | **308** vers `https://` (méthode conservée) |
+| `GET http://auth.../admin/` | 404 (chemin non routé, pas de redirection) |
+| `GET https://auth.../...auth?...` | **200**, formulaire `kc-form-login`, `Strict-Transport-Security: max-age=31536000` |
+| `GET http://auth...` en suivant les redirections | 200 en HTTPS après **1** redirection |
+| `http://epouvante.menuly-app.com` (whoami) | 200, sans redirection ni HSTS : non touché |
+
+Constats :
+- **HTTP refusé pour `auth.`** : toute requête routée est redirigée vers HTTPS ; HSTS n'est envoyé qu'en HTTPS.
+- `permanent: true` donne 301 pour `GET` et 308 pour `POST` (la méthode et le corps sont conservés).
+- Limite : la validation HTTP-01 lors du renouvellement (prévu le 2026-12-27) n'est pas testée. Le routeur du solveur de
+  cert-manager est plus spécifique et sans ces middlewares, et Let's Encrypt suit les redirections : pas de blocage attendu.
+
+#### Étape 7 — Console d'administration par tunnel
+Tunnel ouvert depuis le poste (le port-forward écoute sur la boucle locale du VPS, le tunnel SSH l'amène sur le poste) :
+```bash
+ssh -o ExitOnForwardFailure=yes -L 8180:localhost:8180 ubuntu@51.178.39.218 'kubectl -n sandbox port-forward svc/keycloak 8180:8080'
+```
+Premier constat (sans mot de passe) : `http://localhost:8180/admin/` → 302 vers `/admin/master/console/` → 200.
+
+**Problème : la console affiche « Something went wrong, try again ».** Diagnostic avec Playwright (`playwright-core` 1.64.0,
+Chrome installé sur le poste, en headless, par le tunnel) :
+```
+  0.9s [navigation] http://localhost:8180/admin/master/console/
+  3.2s [HTTP 404] GET https://auth.epouvante.menuly-app.com/realms/master/protocol/openid-connect/3p-cookies/step1.html
+  3.2s [console.error] Failed to load resource: the server responded with a status of 404 ()
+```
+Configuration injectée dans la page de la console :
+```
+"adminBaseUrl":  "http://localhost:8180"
+"authUrl":       "http://localhost:8180"
+"authServerUrl": "https://auth.epouvante.menuly-app.com"
+"serverBaseUrl": "https://auth.epouvante.menuly-app.com"
+```
+Analyse :
+- `KC_HOSTNAME_ADMIN` ne change que l'adresse de la console. La bibliothèque OIDC de la console se connecte au realm `master`
+  par `authServerUrl`, c'est-à-dire l'URL de frontend du realm `master` (par défaut `KC_HOSTNAME`, publique).
+- Sa première étape (test des cookies tiers, `3p-cookies/step1.html`) part donc vers `https://auth.../realms/master/...`,
+  où Traefik répond 404 : `/realms/master` n'est volontairement pas exposé.
+- Conclusion : **`KC_HOSTNAME_ADMIN` ne suffit pas quand `/realms/master` n'est pas public.**
+
+Logs de Keycloak (hors `INFO`, 90 dernières minutes) :
+```powershell
+ssh ubuntu@51.178.39.218 'kubectl -n sandbox logs deploy/keycloak --since=90m | grep -v -E " INFO " | tail -n 40'
+```
+Aucune trace du 404 (il est renvoyé par Traefik, la requête n'atteint pas Keycloak). Seulement les avertissements du
+démarrage (étape 3) et quatre `DefaultCookieProvider ... Non-secure context detected; cookies are not secured` à 15:28 et
+15:31 : ce sont les requêtes HTTP de l'étape 6. Keycloak détecte donc bien le HTTP pour ses cookies, mais `sslRequired`
+ne le refuse pas (étape 6, cause : `KC_HOSTNAME` en URL https complète).
+
+Correction : URL de frontend du realm `master` = adresse du tunnel (réglage propre à ce realm, `epouvante-test` inchangé) :
+```bash
+ssh ubuntu@51.178.39.218 bash -s <<'EOF'
+kubectl -n sandbox exec deploy/keycloak -- sh -c '/opt/keycloak/bin/kcadm.sh config credentials --config /tmp/k.cfg --server http://localhost:8080 --realm master --user admin --password "$KC_BOOTSTRAP_ADMIN_PASSWORD" >/dev/null && /opt/keycloak/bin/kcadm.sh update realms/master -s attributes.frontendUrl=http://localhost:8180 --config /tmp/k.cfg && /opt/keycloak/bin/kcadm.sh get realms/master --fields "realm,sslRequired,attributes(frontendUrl)" --config /tmp/k.cfg; rm -f /tmp/k.cfg'
+EOF
+```
+Résultat : connexion de `kcadm.sh` réussie, puis `HTTP 401 Unauthorized`. Vérification par le tunnel : la mise à jour est
+bien appliquée (`authServerUrl` et `serverBaseUrl` = `http://localhost:8180`, issuer de `master` =
+`http://localhost:8180/realms/master`). Le 401 vient de la relecture, faite avec le jeton obtenu **avant** le changement :
+son `iss` (ancienne URL publique) ne correspond plus à l'issuer de `master`. Réglage ajouté **en dernière position** dans
+`72-configurer-realm.sh` pour cette raison.
+
+Nouvel essai Playwright, puis connexion admin (mot de passe lu dans `keycloak-secrets` par `ssh` et passé au navigateur par une
+variable d'environnement du seul processus `node`, jamais affiché ni écrit) :
+
+| Contrôle | Résultat |
+|---|---|
+| Ouverture de `http://localhost:8180/admin/` | redirection vers `http://localhost:8180/realms/master/protocol/openid-connect/auth`, page « Sign in to Keycloak », aucune requête en échec |
+| Connexion `admin` | réussie, retour sur la console ; bandeau « You are logged in as a temporary admin user » |
+| Realm `epouvante-test`, liste des clients | `epouvante-front` visible |
+| Client `epouvante-front`, onglet *Settings* | `Require PKCE: On`, `PKCE Method: S256` |
+| Adresse publique après correction | `/realms/master/...` (dont `3p-cookies`), `/admin/`, `/admin/master/console/` : toujours **404** ; issuer de `epouvante-test` inchangé (`https://auth...`) |
+
+Constats :
+- **Objectif 2 atteint** : console fonctionnelle par le tunnel seulement ; `/admin` et `/realms/master` restent non publics.
+- Dans Keycloak 26.8, le réglage PKCE est affiché dans l'onglet *Settings* (section *Capability config*), plus dans *Advanced*.
+- Avertissements de la console sans gravité : `iframe` avec `allow-scripts` et `allow-same-origin` (vérification de
+  session de keycloak-js) ; `aria-label` manquant sur des groupes de navigation (accessibilité de la console elle-même).
+- Difficultés du script Playwright : changer seulement l'ancre de l'URL (`#/epouvante-test/clients`) ne recharge pas le realm
+  courant (rechargement nécessaire) ; capture « pleine page » inutile, le contenu défile dans un conteneur interne.
+- Conséquences du réglage : l'issuer de `master` vaut `http://localhost:8180/realms/master`. Seuls l'administrateur et
+  `kcadm.sh` utilisent ce realm. Un administrateur permanent reste à créer (limite du bac à sable).
+- Durée du diagnostic : ≈ 15 min (limite fixée : 1 h, au-delà administration par `kcadm.sh` seul).
+- Script de vérification conservé : `experimentations/exp1/74-verifier-console-admin.js` (sans secret ; contrôles notés
+  `[OK]` / `[ECART]`). Version nettoyée du script de diagnostic, vérifiée par `node --check` mais pas rejouée (tunnel fermé).
+
+Vérification de `kcadm.sh` après le changement (nouvelle connexion) :
+```
+realm master         : sslRequired external, attributes.frontendUrl http://localhost:8180
+realm epouvante-test : sslRequired all
+utilisateurs         : abonne-test, auteur-test
+code de sortie : 0
+```
+`kcadm.sh` fonctionne toujours par `http://localhost:8080` dans le pod : le 401 ne concernait que le jeton obtenu avant le changement.
+
+Fermeture du tunnel :
+- Difficulté : l'arrêt de la commande `ssh` lancée en arrière-plan depuis Git Bash n'a pas arrêté `ssh.exe` (port 8180
+  toujours ouvert sur le poste), arrêté ensuite par son numéro de processus. Côté VPS, le `kubectl port-forward` est
+  resté orphelin (écoute sur `127.0.0.1:8180` et `[::1]:8180` du VPS seulement) ; arrêté par `kill`.
+- Vérification : port 8180 libre sur le poste et sur le VPS.
+- À retenir : ouvrir le tunnel dans un terminal au premier plan et le fermer par Ctrl+C, puis vérifier `ss -tlnp` sur le VPS.
 
 ### Partie 5 — HPA avec metrics-server
 - metrics-server est déjà actif (partie 1, `kubectl top` fonctionne).
@@ -958,6 +1249,8 @@ Constats :
 
 ### À reprendre au déploiement de `app` (constats de la partie 3)
 - Redirection HTTP → HTTPS et en-tête HSTS (`docs/cadrage.md` §1.4.14) : HTTP en clair encore servi.
+  Fait pour `auth.` dans `sandbox` (partie 4, étape 6 : middlewares Traefik) ; à reprendre pour tous les Ingress de `app`.
+  Ne pas compter sur `sslRequired` de Keycloak tant que `KC_HOSTNAME` est une URL https complète.
 - IP réelle du client perdue par ServiceLB : piste `externalTrafficPolicy: Local` sur le service Traefik, à vérifier
   avant de mettre en place le rate limiting sur `POST /annonces`.
 - Limites de cert-manager : celles de `docs/adr/0001-conserver-cert-manager.md`.
