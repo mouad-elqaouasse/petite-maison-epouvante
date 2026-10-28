@@ -1,7 +1,22 @@
-# Expérience 1 — Installation de K3s sur le VPS (journal brut)
+# Expérience 1 — Socle K3s (journal brut)
 
 Journal des commandes et résultats, base du rapport de l'expérience 1.
 Toutes les commandes sont lancées depuis le poste Windows via `ssh ubuntu@51.178.39.218 "..."`.
+
+## Avancement
+
+Périmètre de l'expérience 1 : `docs/cadrage.md` §3, point 1 « Socle K3s ».
+
+| Partie | Statut |
+|---|---|
+| 1. Installation de K3s (UFW, K3s, kubectl, vérifications) | **Fait** (2026-10-28) |
+| 2. RAM réelle de chaque composant de la stack | À faire |
+| 3. Traefik + cert-manager + Let's Encrypt (staging puis production) | À faire |
+| 4. Keycloak (issuer public / JWKS interne) | À faire |
+| 5. HPA avec metrics-server (1 → 3 replicas sous charge, RAM consommée) | À faire |
+| 6. Application des NetworkPolicies | À faire |
+
+Le détail des parties restantes est en fin de journal.
 
 ## Contexte de départ (déjà fait avant l'expérience)
 - Menuly arrêté, Docker désactivé, swap de 2 Go, Ubuntu 24.04.
@@ -211,3 +226,34 @@ Constats :
 - Marge pour l'application : environ **2,5 Gio** disponibles pour troc-service, notification-service,
   PostgreSQL, RabbitMQ, Keycloak, Prometheus et Grafana. Keycloak et les deux JVM Spring Boot seront les
   plus gourmands : à mesurer un par un avant de tout déployer.
+
+**Fin de la partie 1 (installation de K3s). L'expérience 1 n'est pas terminée.**
+
+## Parties restantes (source : `docs/cadrage.md` §3, point 1)
+
+Cadre commun (`docs/cadrage.md` §3) : une journée maximum par expérience, au-delà on documente la difficulté
+et on avance ; travail dans le namespace `sandbox`, supprimé après usage, jamais en même temps que `app` si la
+RAM ne le permet pas. Chaque commande sur le VPS est annoncée et validée avant d'être lancée.
+
+### Partie 2 — RAM réelle de chaque composant
+- Mesurer la consommation réelle (`kubectl top pods`, `free -h`) de chaque composant de la stack, un par un.
+- Point de départ : K3s à vide = 1,2 Gio utilisés, 2,5 Gio disponibles (partie 1).
+
+### Partie 3 — Traefik + cert-manager + Let's Encrypt
+- Traefik est déjà installé par K3s (partie 1) ; installer cert-manager.
+- Émettre un certificat avec Let's Encrypt **staging** d'abord, puis **production**, sur le sous-domaine dédié.
+
+### Partie 4 — Keycloak
+- Déployer Keycloak et vérifier la séparation **issuer public** (URL HTTPS vue par le navigateur) / **JWKS interne**
+  (clés récupérées par les services à l'intérieur du cluster).
+
+### Partie 5 — HPA avec metrics-server
+- metrics-server est déjà actif (partie 1, `kubectl top` fonctionne).
+- Vérifier le passage de 1 à 3 replicas sous charge et mesurer la RAM consommée.
+
+### Partie 6 — NetworkPolicies
+- Vérifier que les NetworkPolicies sont réellement appliquées (trafic interdit bloqué, trafic autorisé passant).
+
+### Rapport final
+Contenu attendu (`docs/cadrage.md` §4, d'après `consignes.md` §1.2.2 — E1) : environnement, étapes pour
+reproduire, difficultés, limites, résultat (adoption / rejet).
