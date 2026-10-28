@@ -10,8 +10,8 @@ Périmètre de l'expérience 1 : `docs/cadrage.md` §3, point 1 « Socle K3s ».
 | Partie | Statut |
 |---|---|
 | 1. Installation de K3s (UFW, K3s, kubectl, vérifications) | **Fait** (2026-10-28) |
-| 2. RAM réelle de chaque composant de la stack | **Fait** (2026-10-28), hors JVM Spring Boot et cert-manager |
-| 3. Traefik + cert-manager + Let's Encrypt (staging puis production) | À faire |
+| 2. RAM réelle de chaque composant de la stack | **Fait** (2026-10-28), hors JVM Spring Boot (cert-manager mesuré en partie 3) |
+| 3. Traefik + cert-manager + Let's Encrypt (staging puis production) | **Fait** (2026-10-28) |
 | 4. Keycloak (issuer public / JWKS interne) | À faire |
 | 5. HPA avec metrics-server (1 → 3 replicas sous charge, RAM consommée) | À faire |
 | 6. Application des NetworkPolicies | À faire |
@@ -235,7 +235,7 @@ Cadre commun (`docs/cadrage.md` §3) : une journée maximum par expérience, au-
 et on avance ; travail dans le namespace `sandbox`, supprimé après usage, jamais en même temps que `app` si la
 RAM ne le permet pas. Chaque commande sur le VPS est annoncée et validée avant d'être lancée.
 
-### Partie 2 — RAM réelle de chaque composant (faite, hors JVM Spring Boot et cert-manager)
+### Partie 2 — RAM réelle de chaque composant (faite, hors JVM Spring Boot ; cert-manager mesuré en partie 3)
 - Mesurer la consommation réelle (`kubectl top pods`, `free -h`) de chaque composant de la stack, un par un.
 - Point de départ : K3s à vide = 1,2 Gio utilisés, 2,5 Gio disponibles (partie 1).
 
@@ -675,13 +675,279 @@ Constats :
 - Non mesuré dans cette partie : les JVM Spring Boot (services pas encore écrits) et cert-manager (partie 3).
 - Les vraies requests/limits seront fixées à partir de ces chiffres, avec une marge, au moment du déploiement `app`.
 
-### Partie 3 — Traefik + cert-manager + Let's Encrypt
+### Partie 3 — Traefik + cert-manager + Let's Encrypt (faite)
 - Traefik est déjà installé par K3s (partie 1) ; installer cert-manager.
-- Émettre un certificat avec Let's Encrypt **staging** d'abord, puis **production**, sur le sous-domaine dédié.
+- Émettre un certificat avec Let's Encrypt **staging** d'abord, puis **production**, sur les deux sous-domaines
+  `epouvante.menuly-app.com` et `auth.epouvante.menuly-app.com`.
+
+#### Méthode et choix (validés avant la première commande)
+- Manifests : `experimentations/exp1/60-cert-manager.yaml`, `61-cluster-issuers.yaml`, `62-whoami.yaml` (commit `109a862`).
+- **Installation par le `HelmChart` de K3s** (contrôleur Helm intégré, pas de Helm sur le VPS) : version figée,
+  requests/limits fixées par les valeurs du chart, ce que le manifest statique officiel ne permet pas.
+  Limites larges (32Mi / 256Mi) pour mesurer avant de fixer les vraies valeurs.
+- **Validation HTTP-01 par `Ingress` standard** (`ingressClassName: traefik`) plutôt que par `IngressRoute` Traefik :
+  cert-manager crée le `Certificate` à partir d'une simple annotation, et le format reste portable.
+- **Pas d'e-mail dans les `ClusterIssuer`** : Let's Encrypt n'envoie plus d'alertes d'expiration, et le dépôt public
+  ne contient aucune donnée personnelle.
+- **Application de test `traefik/whoami`** derrière les deux hôtes, sans Keycloak : exposer Keycloak relève de la
+  partie 4 (hostname, console d'administration non publique, `docs/cadrage.md` §1.4.14).
+- Staging d'abord, à cause des quotas de production (5 échecs de validation par nom et par heure, 5 certificats
+  identiques par semaine).
+
+#### Étape 0 — Vérifications préalables (poste local, rien sur le VPS)
+```bash
+nslookup -type=A epouvante.menuly-app.com 1.1.1.1        # idem AAAA, et pour auth.epouvante.menuly-app.com
+curl -s -H 'accept: application/dns-json' 'https://cloudflare-dns.com/dns-query?name=menuly-app.com&type=CAA'
+curl -sS -o /dev/null -w '%{http_code}\n' http://epouvante.menuly-app.com
+curl -s https://api.github.com/repos/cert-manager/cert-manager/releases/latest | grep -E '"(tag_name|published_at|prerelease)"'
+curl -s https://charts.jetstack.io/index.yaml | grep -c 'cert-manager-v1.21.3.tgz'
+```
+Résultat :
+
+| Vérification | Résultat |
+|---|---|
+| A (`epouvante.`, `auth.`) | `51.178.39.218` |
+| AAAA (les deux noms et `menuly-app.com`) | aucun |
+| CAA (les deux noms et `menuly-app.com`) | aucun (toutes les autorités autorisées) |
+| HTTP port 80 | `404 page not found` (réponse de Traefik) sur les deux noms |
+| cert-manager | `v1.21.3`, publiée le 2026-10-23, chart présent sur `charts.jetstack.io` |
+| whoami | `v1.12.0`, publiée le 2026-07-30 |
+
+Constats :
+- Rien ne bloque l'émission : pas d'IPv6 (K3s est en IPv4 seul, un AAAA aurait fait échouer la validation), pas de CAA.
+- Difficulté : le `nslookup` de Windows ne connaît pas le type CAA (`unknown query type: CAA`). Contournement :
+  requête DNS over HTTPS (DoH) chez Cloudflare.
+- cert-manager v1.21.3 n'avait que 5 jours : version de correctifs de la branche 1.21, conservée.
+
+#### Étape 1 — État de départ
+```powershell
+ssh ubuntu@51.178.39.218 'date -u && kubectl get pods -A && kubectl top nodes && kubectl top pods -A && free -h'
+```
+Résultat (14:28:53 UTC) : stack de la partie 2 toujours en place dans `sandbox` (5 pods, 0 redémarrage).
+```
+vps-c67c8a44   312m   15%   2142Mi   56%
+
+               total        used        free      shared  buff/cache   available
+Mem:           3.7Gi       2.1Gi       553Mi        44Mi       1.5Gi       1.7Gi
+Swap:          2.0Gi        83Mi       1.9Gi
+```
+
+#### Étape 2 — Installation de cert-manager
+```powershell
+scp experimentations/exp1/60-cert-manager.yaml experimentations/exp1/61-cluster-issuers.yaml experimentations/exp1/62-whoami.yaml ubuntu@51.178.39.218:~/exp1/
+ssh ubuntu@51.178.39.218 'kubectl apply -f ~/exp1/60-cert-manager.yaml && for i in $(seq 1 30); do kubectl -n kube-system get job helm-install-cert-manager >/dev/null 2>&1 && break; sleep 2; done && kubectl -n kube-system wait --for=condition=complete job/helm-install-cert-manager --timeout=300s && for d in cert-manager cert-manager-webhook cert-manager-cainjector; do kubectl -n cert-manager rollout status deploy/$d --timeout=180s; done && kubectl -n cert-manager get pods,jobs && kubectl get crd | grep cert-manager.io && kubectl apply --dry-run=server -f ~/exp1/61-cluster-issuers.yaml'
+```
+Résultat (14:30 UTC) :
+```
+helmchart.helm.cattle.io/cert-manager created
+job.batch/helm-install-cert-manager condition met
+pod/cert-manager-6947f7d59c-hqwdj              1/1     Running   0          25s
+pod/cert-manager-cainjector-6c448b4fd6-xngvv   1/1     Running   0          25s
+pod/cert-manager-webhook-5fc8cfd99-qfsvf       1/1     Running   0          25s
+certificaterequests / certificates / challenges / clusterissuers / issuers / orders  (6 CRD)
+clusterissuer.cert-manager.io/letsencrypt-staging created (server dry run)
+clusterissuer.cert-manager.io/letsencrypt-prod created (server dry run)
+```
+Constats :
+- Installation en 29 s (job Helm), 3 pods prêts en 25 s, aucun redémarrage.
+- Le webhook répond : les `ClusterIssuer` passent la validation côté serveur.
+- L'installation crée des CRD et des ClusterRoles : autorisation explicite donnée avant la commande.
+
+#### Étape 3 — RAM de cert-manager au repos
+```powershell
+ssh ubuntu@51.178.39.218 'sleep 120 && date -u && kubectl -n cert-manager get pods && kubectl -n kube-system get jobs && kubectl -n cert-manager get events --field-selector reason=Completed,involvedObject.kind=Job 2>/dev/null | tail -n 3; kubectl -n cert-manager top pods && for d in cert-manager cert-manager-webhook cert-manager-cainjector; do echo $d $(kubectl -n cert-manager get deploy/$d -o jsonpath={.spec.template.spec.containers[0].resources}) $(kubectl -n cert-manager exec deploy/$d -- cat /sys/fs/cgroup/memory.stat 2>/dev/null | grep -E ^anon\ ) $(kubectl -n cert-manager exec deploy/$d -- cat /sys/fs/cgroup/memory.events 2>/dev/null | grep oom_kill\ ); done; kubectl top nodes && free -h'
+```
+Résultat (14:41:15 UTC, pods âgés de 10 min) :
+```
+10m   Normal   Completed   job/cert-manager-startupapicheck   Job completed
+
+cert-manager-6947f7d59c-hqwdj              5m   21Mi
+cert-manager-cainjector-6c448b4fd6-xngvv   4m   17Mi
+cert-manager-webhook-5fc8cfd99-qfsvf       2m   14Mi
+
+resources (les 3) : {"limits":{"cpu":"200m","memory":"256Mi"},"requests":{"cpu":"10m","memory":"32Mi"}}
+
+vps-c67c8a44   356m   17%   2295Mi   60%
+
+               total        used        free      shared  buff/cache   available
+Mem:           3.7Gi       2.2Gi       216Mi        45Mi       1.6Gi       1.5Gi
+Swap:          2.0Gi        83Mi       1.9Gi
+```
+Constats :
+- cert-manager au repos : **52 Mio** pour les 3 pods. Les requests/limits du chart sont bien appliquées.
+- Le job `startupapicheck` s'est terminé puis a été supprimé par le chart (comportement par défaut).
+- Limite de la mesure : images distroless sans `cat`, la lecture du cgroup (`anon`, `oom_kill`) ne renvoie rien.
+  Seul `kubectl top` est disponible (lecture possible depuis l'hôte, non faite).
+- Le nœud prend +153 Mio (2142 → 2295 Mio) pour 52 Mio de pods : variations des autres composants et processus
+  `containerd-shim` des nouveaux pods, du même ordre que les écarts vus en partie 2.
+
+#### Étape 4 — Certificats staging
+```powershell
+ssh ubuntu@51.178.39.218 'kubectl apply -f ~/exp1/61-cluster-issuers.yaml -f ~/exp1/62-whoami.yaml && kubectl -n sandbox rollout status deploy/whoami --timeout=120s && for i in $(seq 1 30); do [ $(kubectl -n sandbox get certificate --no-headers 2>/dev/null | wc -l) -ge 2 ] && break; sleep 2; done; date -u && kubectl -n sandbox get challenges; kubectl -n sandbox wait --for=condition=Ready certificate --all --timeout=300s; date -u && kubectl get clusterissuer && kubectl -n sandbox get certificate,certificaterequest,order,challenge && kubectl -n sandbox describe certificate | grep -A 12 -E ^Events: && kubectl -n sandbox get pods'
+ssh ubuntu@51.178.39.218 'kubectl -n sandbox get pods; kubectl -n sandbox get challenges; kubectl -n sandbox get events --sort-by=.lastTimestamp | grep -i -E certificate\|challenge\|order\|acmesolver | tail -n 25'
+```
+Résultat (14:42:25 → 14:43:04 UTC) :
+```
+letsencrypt-prod      True    39s
+letsencrypt-staging   True    39s
+certificate.cert-manager.io/auth-epouvante-tls   True    auth-epouvante-tls   39s
+certificate.cert-manager.io/epouvante-tls        True    epouvante-tls        39s
+order.acme.cert-manager.io/auth-epouvante-tls-1-1630955684   valid
+order.acme.cert-manager.io/epouvante-tls-1-1253835156        valid
+
+Événements (extraits, chronologiques) :
+IssuerNotReady       certificaterequest/auth-epouvante-tls-1   Referenced issuer does not have a Ready status condition
+WaitingForApproval   certificaterequest/epouvante-tls-1        Not signing CertificateRequest until it is Approved
+Presented            challenge/...                             Presented challenge using HTTP-01 challenge mechanism
+Pulled               pod/cm-acme-http-solver-hq5s7             ... cert-manager-acmesolver:v1.21.3 in 1.775s. Image size: 6663508 bytes.
+DomainVerified       challenge/...                             Domain "epouvante.menuly-app.com" verified with "HTTP-01" validation
+DomainVerified       challenge/...                             Domain "auth.epouvante.menuly-app.com" verified with "HTTP-01" validation
+Killing              pod/cm-acme-http-solver-*                 Stopping container acmesolver
+CertificateIssued    certificaterequest/*-tls-1                Certificate fetched from issuer successfully
+```
+Vérification depuis le poste (bash) :
+```bash
+echo | openssl s_client -connect epouvante.menuly-app.com:443 -servername epouvante.menuly-app.com 2>/dev/null | openssl x509 -noout -issuer -subject -dates -ext subjectAltName
+curl -sS https://epouvante.menuly-app.com
+```
+```
+issuer=C=US, O=Let's Encrypt, CN=(STAGING) Ersatz Emmer YR2
+subject=CN=epouvante.menuly-app.com
+notBefore=Oct 28 13:44:30 2026 GMT
+notAfter=Dec 31 13:44:29 2026 GMT
+X509v3 Subject Alternative Name: DNS:epouvante.menuly-app.com
+curl: (60) schannel: SEC_E_UNTRUSTED_ROOT (0x80090325)
+```
+(Identique pour `auth.epouvante.menuly-app.com`.)
+
+Constats :
+- Deux certificats staging émis en **≈ 40 s** après l'`apply` ; validation HTTP-01 en **22 s** (de `Presented` à
+  `DomainVerified`). Pods `acmesolver` (image de 6,6 Mo) supprimés après validation, aucun `challenge` restant.
+- `IssuerNotReady` et `WaitingForApproval` sont transitoires : les certificats sont demandés pendant
+  l'enregistrement des comptes ACME, cert-manager réessaie seul.
+- Le refus du certificat par `curl` est attendu : la racine staging n'est pas reconnue.
+- Certificats staging de **64 jours** ; `notBefore` antidaté d'environ 1 h (pratique de Let's Encrypt pour tolérer
+  les horloges en retard).
+- Difficulté : le `grep -A 12 -E ^Events:` n'a rien trouvé (code 1), ce qui a interrompu la fin de la commande
+  enchaînée par `&&`. Pods et événements relus par une seconde commande, rien de perdu.
+
+#### Étape 5 — Passage en production
+Changement d'émetteur directement sur les Ingress (le manifest garde le staging comme point de départ) :
+```powershell
+ssh ubuntu@51.178.39.218 'kubectl -n sandbox annotate ingress whoami-epouvante whoami-auth cert-manager.io/cluster-issuer=letsencrypt-prod --overwrite && for i in $(seq 1 30); do kubectl -n sandbox get certificaterequest epouvante-tls-2 auth-epouvante-tls-2 >/dev/null 2>&1 && break; sleep 2; done; kubectl -n sandbox wait --for=condition=Ready certificaterequest/epouvante-tls-2 certificaterequest/auth-epouvante-tls-2 --timeout=300s; kubectl -n sandbox wait --for=condition=Ready certificate --all --timeout=60s; date -u; kubectl -n sandbox get certificate -o custom-columns=NOM:.metadata.name,EMETTEUR:.spec.issuerRef.name,PRET:.status.conditions[0].status,RENOUVELLEMENT:.status.renewalTime; kubectl -n sandbox get certificaterequest,order,challenge; kubectl -n sandbox get pods'
+```
+On attend les **nouvelles** demandes (`-2`) : les certificats staging étant déjà `Ready`, attendre les `Certificate`
+seuls se serait terminé immédiatement.
+
+Résultat (14:44:45 UTC) :
+```
+NOM                  EMETTEUR           PRET   RENOUVELLEMENT
+auth-epouvante-tls   letsencrypt-prod   True   2026-12-27T13:46:10Z
+epouvante-tls        letsencrypt-prod   True   2026-12-27T13:46:12Z
+certificaterequest.cert-manager.io/auth-epouvante-tls-2   True   True   letsencrypt-prod   29s
+certificaterequest.cert-manager.io/epouvante-tls-2        True   True   letsencrypt-prod   25s
+order.acme.cert-manager.io/auth-epouvante-tls-2-1312749684   valid   29s
+order.acme.cert-manager.io/epouvante-tls-2-3013016324        valid   25s
+```
+Vérification depuis le poste (mêmes commandes qu'à l'étape 4) :
+```
+issuer=C=US, O=Let's Encrypt, CN=YR1
+subject=CN=epouvante.menuly-app.com
+notBefore=Oct 28 13:46:13 2026 GMT
+notAfter=Jan 26 13:46:12 2027 GMT
+X509v3 Subject Alternative Name: DNS:epouvante.menuly-app.com
+
+Réponse de whoami (curl sans -k) :
+Host: epouvante.menuly-app.com
+X-Forwarded-For: 10.42.0.1
+X-Forwarded-Port: 443
+X-Forwarded-Proto: https
+X-Forwarded-Server: traefik-7c8544f77-5mc87
+X-Real-Ip: 10.42.0.1
+```
+(Identique pour `auth.epouvante.menuly-app.com`.)
+
+Constats :
+- **Les deux sous-domaines sont servis en HTTPS avec un certificat de production reconnu**, sans aucun échec de
+  validation. Réémission en **moins de 30 s** après le changement d'annotation.
+- Certificats de production de **90 jours** (les 64 jours ne concernent que le staging) ; renouvellement prévu aux
+  2/3 de la durée, soit 30 jours avant l'expiration.
+- **IP réelle du client perdue** : whoami reçoit `X-Forwarded-For: 10.42.0.1` (adresse interne du cluster), pas
+  l'adresse publique du poste. Le répartiteur intégré à K3s (ServiceLB) traduit l'adresse source avant Traefik.
+  Conséquence : un rate limiting par IP sur `POST /annonces` (`docs/cadrage.md` §1.4.14) traiterait tous les clients
+  comme un seul. Non bloquant pour la partie 3.
+
+#### Étape 6 — Vérifications finales
+```powershell
+ssh ubuntu@51.178.39.218 'date -u; kubectl -n sandbox describe certificate epouvante-tls | grep -E Not\ After\|Not\ Before\|Renewal\ Time; kubectl -n sandbox get pods,challenges; kubectl -n sandbox get secret epouvante-tls auth-epouvante-tls; kubectl -n cert-manager get secret; kubectl -n cert-manager top pods; kubectl top nodes; free -h'
+```
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' http://epouvante.menuly-app.com
+```
+Résultat (14:45:51 UTC) :
+```
+Not After:     2027-01-26T13:46:12Z
+Not Before:    2026-10-28T13:46:13Z
+Renewal Time:  2026-12-27T13:46:12Z
+
+6 pods Running dans sandbox (stack de la partie 2 + whoami), 0 redémarrage ; aucun challenge
+
+Secrets (noms seulement) :
+sandbox       epouvante-tls, auth-epouvante-tls                     kubernetes.io/tls
+cert-manager  letsencrypt-prod-account, letsencrypt-staging-account Opaque (clés des comptes ACME)
+cert-manager  cert-manager-webhook-ca, sh.helm.release.v1.cert-manager.v1
+
+cert-manager-6947f7d59c-hqwdj              2m   42Mi
+cert-manager-cainjector-6c448b4fd6-xngvv   2m   17Mi
+cert-manager-webhook-5fc8cfd99-qfsvf       1m   17Mi
+
+vps-c67c8a44   221m   11%   2340Mi   61%
+
+               total        used        free      shared  buff/cache   available
+Mem:           3.7Gi       2.3Gi       146Mi        45Mi       1.6Gi       1.4Gi
+Swap:          2.0Gi        83Mi       1.9Gi
+
+HTTP en clair : 200
+```
+Constats :
+- Renouvellement planifié ; aucun résidu de validation.
+- Les clés des comptes ACME sont dans `cert-manager` : elles survivent à la suppression de `sandbox`.
+- Le contrôleur double (21 → 42 Mio) après les émissions : il garde en cache les certificats, Secrets et commandes
+  qu'il surveille.
+- HTTP en clair toujours servi (`200`), sans redirection vers HTTPS : à configurer pour `app`.
+
+#### Bilan de la partie 3
+
+| Pod cert-manager | Repos, avant émission | Après 4 émissions | Limite pendant le test |
+|---|---|---|---|
+| contrôleur | 21 Mio | 42 Mio | 256Mi |
+| cainjector | 17 Mio | 17 Mio | 256Mi |
+| webhook | 14 Mio | 17 Mio | 256Mi |
+| **Total** | **52 Mio** | **76 Mio** | |
+
+| Mesure | Valeur |
+|---|---|
+| Installation de cert-manager (job Helm) | 29 s |
+| Émission staging (2 certificats, depuis l'`apply`) | ≈ 40 s, dont 22 s de validation HTTP-01 |
+| Réémission production (2 certificats) | < 30 s |
+| Durée des certificats | staging 64 j, production 90 j |
+| RAM disponible (`free`) | 1,7 Gio avant → 1,4 Gio après |
+
+Constats :
+- **Objectif atteint** : HTTPS de production sur les deux sous-domaines, émission et renouvellement automatiques.
+- cert-manager est léger (76 Mio après émissions) : il tient largement dans le budget RAM (`docs/cadrage.md` §1.4.18).
+- Conservation de cert-manager et des `ClusterIssuer` pour `app` : décision consignée dans
+  `docs/adr/0001-conserver-cert-manager.md`, avec les limites retenues.
+- Difficultés : CAA invisible avec `nslookup` sous Windows (contourné par DoH) ; `grep` sans résultat qui interrompt
+  une commande enchaînée par `&&`.
+- Limites : pas de mesure `anon`/`oom_kill` (images distroless) ; renouvellement non testé (pas de réémission forcée
+  en production, à cause des quotas) ; HTTP-01 seulement (pas de certificat wildcard, qui exigerait DNS-01).
 
 ### Partie 4 — Keycloak
 - Déployer Keycloak et vérifier la séparation **issuer public** (URL HTTPS vue par le navigateur) / **JWKS interne**
   (clés récupérées par les services à l'intérieur du cluster).
+- `auth.epouvante.menuly-app.com` pointe provisoirement vers whoami (partie 3) : rediriger l'Ingress `whoami-auth`
+  vers Keycloak en gardant le Secret `auth-epouvante-tls` et l'émetteur `letsencrypt-prod`.
 
 ### Partie 5 — HPA avec metrics-server
 - metrics-server est déjà actif (partie 1, `kubectl top` fonctionne).
@@ -689,6 +955,18 @@ Constats :
 
 ### Partie 6 — NetworkPolicies
 - Vérifier que les NetworkPolicies sont réellement appliquées (trafic interdit bloqué, trafic autorisé passant).
+
+### À reprendre au déploiement de `app` (constats de la partie 3)
+- Redirection HTTP → HTTPS et en-tête HSTS (`docs/cadrage.md` §1.4.14) : HTTP en clair encore servi.
+- IP réelle du client perdue par ServiceLB : piste `externalTrafficPolicy: Local` sur le service Traefik, à vérifier
+  avant de mettre en place le rate limiting sur `POST /annonces`.
+- Limites de cert-manager : celles de `docs/adr/0001-conserver-cert-manager.md`.
+
+### Nettoyage en fin d'expérience
+- Supprimer le namespace `sandbox` (whoami, Ingress, Secrets TLS et toute la stack de la partie 2).
+- Supprimer `ClusterRole` et `ClusterRoleBinding` `sandbox-prometheus` (hors namespace, voir partie 2).
+- cert-manager, son `HelmChart` dans `kube-system` et les deux `ClusterIssuer` sont **conservés** pour `app`
+  (`docs/adr/0001-conserver-cert-manager.md`).
 
 ### Rapport final
 Contenu attendu (`docs/cadrage.md` §4, d'après `consignes.md` §1.2.2 — E1) : environnement, étapes pour
