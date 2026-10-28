@@ -1,0 +1,98 @@
+# Expérience 1, partie 2 — Grafana, branché sur le Prometheus du bac à sable.
+# Secret attendu, créé à la main sur le VPS (jamais dans le dépôt) :
+#   grafana-secrets : GF_SECURITY_ADMIN_PASSWORD
+# Limite mémoire large : on mesure la consommation réelle avant de fixer les vraies limites.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: sandbox
+data:
+  prometheus.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus.sandbox.svc:9090
+        isDefault: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: sandbox
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 472
+        fsGroup: 472
+      containers:
+        - name: grafana
+          image: grafana/grafana:13.3.0
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: admin
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-secrets
+                  key: GF_SECURITY_ADMIN_PASSWORD
+            - name: GF_ANALYTICS_REPORTING_ENABLED
+              value: "false"
+            # Pas de téléchargement de plugins au démarrage : sans ce réglage, Grafana installe et met à jour
+            # ~430 Mo de plugins à chaque lancement (cache de fichiers gonflé, versions non reproductibles).
+            - name: GF_PLUGINS_PREINSTALL_DISABLED
+              value: "true"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: data
+              mountPath: /var/lib/grafana
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: sandbox
+spec:
+  selector:
+    app: grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http

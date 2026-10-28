@@ -1,0 +1,105 @@
+# Expérience 1, partie 2 — Keycloak en mode production (start), base dédiée « keycloak » sur PostgreSQL.
+# Secrets attendus, créés à la main sur le VPS (jamais dans le dépôt) :
+#   postgres-secrets : KEYCLOAK_DB_PASSWORD
+#   keycloak-secrets : KC_BOOTSTRAP_ADMIN_PASSWORD
+# JVM : Keycloak dimensionne son tas d'après la limite du conteneur (MaxRAMPercentage),
+# la limite est donc réaliste dès le départ (768Mi) pour ne pas fausser la mesure.
+# Provisoire jusqu'à la partie 3 (TLS) et 4 (issuer public) : HTTP interne, nom d'hôte non strict.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: sandbox
+  labels:
+    app: keycloak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.8.1
+          args: ["start"]
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 9000
+          env:
+            - name: KC_DB
+              value: postgres
+            - name: KC_DB_URL
+              value: jdbc:postgresql://postgres:5432/keycloak
+            - name: KC_DB_USERNAME
+              value: keycloak
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: KEYCLOAK_DB_PASSWORD
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
+              value: admin
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secrets
+                  key: KC_BOOTSTRAP_ADMIN_PASSWORD
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_PROXY_HEADERS
+              value: xforwarded
+            - name: KC_HOSTNAME_STRICT
+              value: "false"
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            - name: KC_METRICS_ENABLED
+              value: "true"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 768Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+          startupProbe:
+            httpGet:
+              path: /health/started
+              port: management
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: management
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: management
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: sandbox
+spec:
+  selector:
+    app: keycloak
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+    - name: management
+      port: 9000
+      targetPort: management

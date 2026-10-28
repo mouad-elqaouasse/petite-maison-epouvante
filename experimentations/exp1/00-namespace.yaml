@@ -1,0 +1,8 @@
+# Expérience 1 — namespace de bac à sable.
+# Conservé jusqu'à la fin de l'expérience 1 (parties 3 et 4), puis supprimé.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sandbox
+  labels:
+    experimentation: exp1

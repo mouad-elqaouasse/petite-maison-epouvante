@@ -1,0 +1,87 @@
+# Expérience 1, partie 2 — RabbitMQ (mesure de RAM seulement ; test complet dans l'expérience 2).
+# Secret attendu, créé à la main sur le VPS (jamais dans le dépôt) :
+#   rabbitmq-secrets : RABBITMQ_DEFAULT_PASS
+# Limite mémoire large : on mesure la consommation réelle avant de fixer les vraies limites.
+# Données en emptyDir : suffisant pour une mesure de RAM, pas de persistance attendue ici.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbitmq
+  namespace: sandbox
+  labels:
+    app: rabbitmq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+    spec:
+      # Tout le pod sous l'utilisateur rabbitmq de l'image alpine (uid 100, gid 101) : la sonde
+      # rabbitmq-diagnostics tourne sous le même utilisateur que le serveur. En root, elle pouvait créer
+      # .erlang.cookie avant le serveur, qui ne pouvait plus le lire (eacces, redémarrage au premier lancement).
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+        fsGroup: 101
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:4.4.0-management-alpine
+          ports:
+            - name: amqp
+              containerPort: 5672
+            - name: management
+              containerPort: 15672
+            - name: prometheus
+              containerPort: 15692
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              value: admin
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-secrets
+                  key: RABBITMQ_DEFAULT_PASS
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+          readinessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+            periodSeconds: 20
+            timeoutSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  namespace: sandbox
+spec:
+  selector:
+    app: rabbitmq
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: amqp
+    - name: management
+      port: 15672
+      targetPort: management
+    - name: prometheus
+      port: 15692
+      targetPort: prometheus
