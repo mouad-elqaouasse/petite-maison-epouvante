@@ -12,7 +12,7 @@ Périmètre de l'expérience 1 : `docs/cadrage.md` §3, point 1 « Socle K3s ».
 | 1. Installation de K3s (UFW, K3s, kubectl, vérifications) | **Fait** (2026-10-28) |
 | 2. RAM réelle de chaque composant de la stack | **Fait** (2026-10-28), hors JVM Spring Boot (cert-manager mesuré en partie 3) |
 | 3. Traefik + cert-manager + Let's Encrypt (staging puis production) | **Fait** (2026-10-28) |
-| 4. Keycloak (issuer public / JWKS interne) | **En cours** (étapes 0 à 7 faites le 2026-10-28) |
+| 4. Keycloak (issuer public / JWKS interne) | **Fait** (2026-10-28) |
 | 5. HPA avec metrics-server (1 → 3 replicas sous charge, RAM consommée) | À faire |
 | 6. Application des NetworkPolicies | À faire |
 
@@ -943,7 +943,7 @@ Constats :
 - Limites : pas de mesure `anon`/`oom_kill` (images distroless) ; renouvellement non testé (pas de réémission forcée
   en production, à cause des quotas) ; HTTP-01 seulement (pas de certificat wildcard, qui exigerait DNS-01).
 
-### Partie 4 — Keycloak exposé en HTTPS (en cours)
+### Partie 4 — Keycloak exposé en HTTPS (faite)
 Objectifs :
 1. Keycloak en mode production derrière Traefik, avec le certificat HTTPS de la partie 3.
 2. Console d'administration non publique (accessible seulement par tunnel depuis le poste ; `docs/cadrage.md` §1.4.14).
@@ -1240,6 +1240,140 @@ Fermeture du tunnel :
 - Vérification : port 8180 libre sur le poste et sur le VPS.
 - À retenir : ouvrir le tunnel dans un terminal au premier plan et le fermer par Ctrl+C, puis vérifier `ss -tlnp` sur le VPS.
 
+#### Étape 8 — Issuer public / JWKS interne
+Ajustement préalable de `73-verifier-jetons.sh` : `--pod-running-timeout=3m` sur `kubectl run` (1 min par défaut ; image à
+télécharger au premier lancement, jeton valable 5 min). Script transféré, empreintes identiques.
+```powershell
+ssh ubuntu@51.178.39.218 'date -u; bash ~/exp1/73-verifier-jetons.sh; echo "code de sortie : $?"; date -u; kubectl -n sandbox get pod verif-jwt 2>&1 | tail -n 1'
+```
+Résultat (16:27:30 → 16:27:42 UTC, code de sortie 0) :
+
+| Test (sur le VPS, par l'URL publique) | Attendu | Obtenu |
+|---|---|---|
+| A. Demande d'autorisation sans `code_challenge` | refus | `302` vers l'application avec `error=invalid_request` |
+| B. Octroi par mot de passe sur `epouvante-front` | refus | `400`, `unauthorized_client` |
+| C. Échange du code sans `code_verifier` | refus | `400`, `invalid_grant` |
+| D. Échange du code avec un mauvais `code_verifier` | refus | `400`, `invalid_grant` |
+| E. Flux PKCE complet | jeton | `200`, `Bearer`, `expires_in` 300, scopes `openid email profile` |
+
+Dans le pod éphémère `verif-jwt` (`smallstep/step-cli:0.31.0`, limite 64Mi, uid 1000) :
+```
+JWKS par http://keycloak.sandbox.svc:8080/.../certs : HTTP 200
+clés : kid L3-yLni6…  alg RSA-OAEP  use enc
+       kid Ax1gCURV…  alg RS256     use sig
+kid du jeton : Ax1gCURV… ; alg : RS256
+claims : iss https://auth.epouvante.menuly-app.com/realms/epouvante-test
+         aud ["troc-service","notification-service"]  azp epouvante-front  typ Bearer
+         preferred_username auteur-test  roles ["USER"]  durée 300 s
+```
+
+| Vérification (`step crypto jwt verify --jwks <JWKS interne>`) | Attendu | Obtenu |
+|---|---|---|
+| `--iss` public, `--aud troc-service` | valide | **[OK] VALIDE** |
+| `--iss` = adresse interne (le piège) | refus | **[OK] REFUSÉ** : `invalid issuer claim (iss)` |
+| `--aud service-inconnu` | refus | [OK] REFUSÉ : `invalid audience claim (aud)` |
+| Jeton altéré (rôle `MODERATEUR` ajouté, signature d'origine) | refus | [OK] REFUSÉ : `invalid signature` |
+
+```
+Document de découverte lu par l'adresse interne :
+{"issuer":"https://auth.epouvante.menuly-app.com/realms/epouvante-test",
+ "jwks_uri":"https://auth.epouvante.menuly-app.com/realms/epouvante-test/protocol/openid-connect/certs", ...}
+Accès du pod à l'URL publique : HTTP 200 en 0.21 s
+```
+Pod supprimé à la fin (`pods "verif-jwt" not found`).
+
+Constats :
+- **Objectif 4 atteint** : un pod récupère les clés par l'adresse interne (HTTP) et valide un jeton émis pour l'adresse
+  publique ; le même jeton est refusé si l'issuer attendu est l'adresse interne.
+- **PKCE obligatoire et effectif** (objectif 3) : sans `code_challenge`, sans `code_verifier` ou avec un mauvais
+  `code_verifier`, pas de jeton ; octroi par mot de passe refusé au client public.
+- Audiences présentes (`troc-service`, `notification-service`), rôle `USER` dans `realm_access`, jeton de 5 min.
+- Le document de découverte, même lu par l'adresse interne, annonce un `jwks_uri` **public** : un service qui ne
+  s'appuierait que sur la découverte irait chercher les clés par l'extérieur. Conséquence pour les resource servers Spring
+  (`docs/cadrage.md` §1.2.9) : `issuer-uri` = URL publique et `jwk-set-uri` = URL interne, fixée explicitement.
+- L'URL publique est joignable depuis un pod (retour par l'IP publique du VPS, 0,21 s) ; le JWKS interne évite tout de même
+  de dépendre du DNS public, de Traefik et du certificat pour valider les jetons.
+- Effets sur Keycloak : 3 connexions de `auteur-test` (3 sessions dans le realm de test), aucun échec de mot de passe.
+- Non testé ici : la configuration Spring elle-même (avec US1a et Testcontainers) ; le refresh token et sa rotation.
+
+#### Étape 9 — RAM après les changements
+```powershell
+ssh ubuntu@51.178.39.218 'sleep 120 && date -u && kubectl -n sandbox get pods && kubectl -n sandbox top pods && echo --- keycloak && kubectl -n sandbox exec deploy/keycloak -- grep -E "^(anon|file|active_file|inactive_file) " /sys/fs/cgroup/memory.stat && kubectl -n sandbox exec deploy/keycloak -- cat /sys/fs/cgroup/memory.peak /sys/fs/cgroup/memory.events && echo --- oom_kill && for d in postgres keycloak rabbitmq prometheus grafana; do echo $d $(kubectl -n sandbox exec deploy/$d -- grep "oom_kill " /sys/fs/cgroup/memory.events); done && kubectl -n cert-manager top pods && kubectl top nodes && free -h'
+```
+Résultat (16:30:53 UTC, 2 min après l'étape 8 ; Keycloak âgé de 79 min) :
+```
+6 pods Running dans sandbox, 0 redémarrage
+
+grafana      24m   286Mi
+keycloak     10m   590Mi
+postgres      6m    46Mi
+prometheus   10m    59Mi
+rabbitmq    115m    84Mi
+whoami        1m     3Mi
+
+Keycloak : anon 556380160 (531 Mio) ; file 160198656 (153 Mio) ; active_file 56410112 (54 Mio) ;
+           inactive_file 103788544 (99 Mio) ; memory.peak 805306368 (768 Mio) ; low/high/max/oom/oom_kill = 0
+oom_kill   : postgres 0, keycloak 0, rabbitmq 0, prometheus 0, grafana 0
+cert-manager : contrôleur 31Mi, cainjector 17Mi, webhook 15Mi
+
+vps-c67c8a44   258m   12%   2546Mi   66%
+Mem:           3.7Gi       2.3Gi       185Mi        50Mi       1.6Gi       1.4Gi
+Swap:          2.0Gi        74Mi       1.9Gi
+```
+
+| Keycloak | Partie 2 (`start`, sans realm) | Partie 4 (nom d'hôte fixe, realm, 3 connexions, console) |
+|---|---|---|
+| `kubectl top` | 549 Mio | **590 Mio** |
+| Mémoire propre (`anon`) | 534 Mio | **531 Mio** |
+| Pic au démarrage (`memory.peak`) | 768 Mio (= limite) | 768 Mio (= limite) |
+| Événements mémoire (`max`, `oom`, `oom_kill`) | 0 | **0** |
+| Prêt en | 2 min 36 s | 1 min 47 s |
+
+Constats :
+- **Objectif 5** : mémoire propre de Keycloak **inchangée** (531 contre 534 Mio). Le realm de test, trois sessions et
+  l'usage de la console n'ont pas fait grossir la JVM. Les +41 Mio de `kubectl top` viennent du cache de fichiers actif,
+  récupérable par le noyau.
+- Évolution depuis le redémarrage : 494 Mio à 6 min (étape 3), 590 Mio à 79 min.
+- Marge de la mémoire propre avant la limite de 768Mi : ≈ 237 Mio. Limite suffisante au repos et pour quelques connexions ;
+  à revérifier sous charge (nombreuses sessions) pendant les campagnes JMeter.
+- Prometheus (40 → 59 Mio) et Grafana (232 → 286 Mio) augmentent avec le temps, comme prévu en partie 2.
+- Nœud : 2312 → 2546 Mio (`kubectl top`) ; `free` : 1,5 → **1,4 Gio disponibles** sur toute la partie (seuil d'arrêt : 500 Mio).
+
+#### Bilan de la partie 4
+
+| Objectif | Résultat |
+|---|---|
+| 1. Keycloak en mode production derrière Traefik, certificat existant | **Atteint** : `start`, `KC_HOSTNAME` public fixe, TLS terminé par Traefik avec le certificat `letsencrypt-prod` de la partie 3 (aucune réémission) ; HTTP redirigé vers HTTPS, HSTS d'un an |
+| 2. Console d'administration non publique | **Atteint** : `/admin` et `/realms/master` non routés (404 Traefik) ; console fonctionnelle par tunnel (`kubectl port-forward` + SSH) grâce à l'URL de frontend du realm `master` |
+| 3. Realm de test, client public PKCE, deux comptes | **Atteint** : `epouvante-test`, `epouvante-front` (PKCE `S256` obligatoire, pas d'octroi par mot de passe), `auteur-test` et `abonne-test` (rôle `USER`) ; mots de passe générés sur le VPS, jamais affichés |
+| 4. Issuer public / JWKS interne | **Atteint** : jeton validé dans un pod avec les clés lues par l'adresse interne et l'issuer public ; refusé avec l'issuer interne, une audience inconnue ou un rôle ajouté |
+| 5. RAM de Keycloak | **Mesurée** : 590 Mio (`kubectl top`), 531 Mio de mémoire propre, pic à la limite de 768Mi sans événement mémoire |
+
+| Mesure | Valeur |
+|---|---|
+| Démarrage de Keycloak (`Recreate`) | prêt en 1 min 47 s, serveur démarré en 26,1 s |
+| Bascule de l'Ingress | sans réémission de certificat (Secret inchangé) |
+| Vérification complète des jetons (`73-verifier-jetons.sh`) | 12 s, 9 résultats conformes |
+| RAM disponible (`free`) | 1,5 Gio avant → 1,4 Gio après |
+
+Difficultés :
+- **HTTP clair servi malgré `sslRequired`** : avec `KC_HOSTNAME` en URL https complète, Keycloak traite toute requête comme
+  HTTPS ; `sslRequired` (même `all`) est sans effet. Première hypothèse (IP privée vue par Keycloak) invalidée par un test
+  direct. Correction dans Traefik (redirection + HSTS) (étape 6).
+- **Console « Something went wrong »** : `KC_HOSTNAME_ADMIN` ne suffit pas, la console se connecte au realm `master` par son
+  URL de frontend (publique par défaut, non routée). Corrigé par l'URL de frontend du realm `master` (étape 7).
+- `kcadm.sh` : affichage des objets imbriqués seulement avec des sous-champs nommés ; jeton refusé (401) juste après le
+  changement d'issuer de `master`.
+- Tunnel : processus `ssh.exe` et `kubectl port-forward` survivant à l'arrêt de la commande lancée en arrière-plan.
+
+Limites :
+- Validation par un vrai resource server Spring non faite (US1a, Testcontainers) ; refresh token et rotation non testés.
+- Administrateur de démarrage temporaire (bandeau de la console) ; pas d'administrateur permanent.
+- Image Keycloak non optimisée (`kc.sh build` au démarrage) : pic à la limite et CPU à 1 cœur pendant le démarrage.
+- Comportement mémoire sous charge non mesuré.
+- Renouvellement du certificat avec la redirection HTTPS non observé (premier renouvellement le 2026-12-27).
+- Rôles par défaut (`default-roles-epouvante-test`) absents des comptes importés.
+
 ### Partie 5 — HPA avec metrics-server
 - metrics-server est déjà actif (partie 1, `kubectl top` fonctionne).
 - Vérifier le passage de 1 à 3 replicas sous charge et mesurer la RAM consommée.
@@ -1247,7 +1381,10 @@ Fermeture du tunnel :
 ### Partie 6 — NetworkPolicies
 - Vérifier que les NetworkPolicies sont réellement appliquées (trafic interdit bloqué, trafic autorisé passant).
 
-### À reprendre au déploiement de `app` (constats de la partie 3)
+### À reprendre au déploiement de `app` (constats des parties 3 et 4)
+- Resource servers Spring : `issuer-uri` = URL publique, `jwk-set-uri` = URL interne fixée explicitement (partie 4, étape 8).
+- Keycloak : URL de frontend du realm `master` sur l'adresse du tunnel ; seul le realm applicatif exposé ; administrateur
+  permanent à créer à la place de l'administrateur de démarrage ; image optimisée (`start --optimized`) à étudier.
 - Redirection HTTP → HTTPS et en-tête HSTS (`docs/cadrage.md` §1.4.14) : HTTP en clair encore servi.
   Fait pour `auth.` dans `sandbox` (partie 4, étape 6 : middlewares Traefik) ; à reprendre pour tous les Ingress de `app`.
   Ne pas compter sur `sslRequired` de Keycloak tant que `KC_HOSTNAME` est une URL https complète.
