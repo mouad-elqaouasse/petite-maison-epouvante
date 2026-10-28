@@ -1,0 +1,71 @@
+# Expérience 1, partie 4 — Keycloak exposé en HTTPS sur auth.epouvante.menuly-app.com.
+# Remplace l'Ingress whoami-auth (partie 3), à supprimer AVANT d'appliquer ce fichier :
+# deux Ingress sur le même Secret TLS se disputeraient le même Certificate.
+# Reprend le Secret auth-epouvante-tls déjà émis (letsencrypt-prod) : aucune réémission attendue.
+# Chemins exposés (recommandation Keycloak « Using a reverse proxy », tableau des chemins exposés) :
+#   /realms/epouvante-test : endpoints OIDC du realm de test
+#   /resources             : feuilles de style et scripts des pages de connexion
+# Non exposés : /admin, /realms/master, /health et /metrics (port de gestion 9000, absent de l'Ingress).
+#
+# HTTP → HTTPS : Keycloak ne peut pas refuser le HTTP lui-même. Avec KC_HOSTNAME en URL https complète,
+# il traite chaque requête comme HTTPS, et sslRequired (même « all ») n'a plus d'effet. La redirection est
+# donc faite par Traefik, pour cet Ingress seulement.
+# Validation HTTP-01 de cert-manager non touchée : l'Ingress temporaire du solveur crée son propre routeur
+# (/.well-known/acme-challenge/…), plus spécifique, donc prioritaire, et sans ces middlewares.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: keycloak-redirect-https
+  namespace: sandbox
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+# HSTS d'un an, limité à auth. : ni includeSubDomains ni preload (choix réversible).
+# Traefik n'ajoute l'en-tête que sur les réponses HTTPS (forceSTSHeader non activé).
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: keycloak-hsts
+  namespace: sandbox
+spec:
+  headers:
+    stsSeconds: 31536000
+    stsIncludeSubdomains: false
+    stsPreload: false
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: keycloak
+  namespace: sandbox
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # Format <namespace>-<nom>@kubernetescrd. Appliqués aux routeurs HTTP et HTTPS de cet Ingress :
+    # la redirection ne s'applique pas à une requête déjà en HTTPS.
+    traefik.ingress.kubernetes.io/router.middlewares: sandbox-keycloak-redirect-https@kubernetescrd,sandbox-keycloak-hsts@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - auth.epouvante.menuly-app.com
+      secretName: auth-epouvante-tls
+  rules:
+    - host: auth.epouvante.menuly-app.com
+      http:
+        paths:
+          - path: /realms/epouvante-test
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  name: http
+          - path: /resources
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  name: http

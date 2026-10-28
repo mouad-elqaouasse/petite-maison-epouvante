@@ -1,0 +1,90 @@
+{
+  "realm": "epouvante-test",
+  "displayName": "La Petite Maison de l'Épouvante (test)",
+  "enabled": true,
+  "sslRequired": "all",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": false,
+  "bruteForceProtected": true,
+  "accessTokenLifespan": 300,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+  "roles": {
+    "realm": [
+      { "name": "USER", "description": "Membre de l'association" },
+      { "name": "MODERATEUR", "description": "Peut retirer une annonce" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "epouvante-front",
+      "name": "Front Angular",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "redirectUris": [
+        "https://epouvante.menuly-app.com/*",
+        "http://localhost:4200/*"
+      ],
+      "webOrigins": [
+        "https://epouvante.menuly-app.com",
+        "http://localhost:4200"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://epouvante.menuly-app.com/*##http://localhost:4200/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-troc-service",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "troc-service",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "audience-notification-service",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "notification-service",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "auteur-test",
+      "enabled": true,
+      "email": "auteur-test@example.com",
+      "emailVerified": true,
+      "firstName": "Auteur",
+      "lastName": "Test",
+      "realmRoles": ["USER"],
+      "requiredActions": []
+    },
+    {
+      "username": "abonne-test",
+      "enabled": true,
+      "email": "abonne-test@example.com",
+      "emailVerified": true,
+      "firstName": "Abonne",
+      "lastName": "Test",
+      "realmRoles": ["USER"],
+      "requiredActions": []
+    }
+  ]
+}

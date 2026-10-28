@@ -4,7 +4,10 @@
 #   keycloak-secrets : KC_BOOTSTRAP_ADMIN_PASSWORD
 # JVM : Keycloak dimensionne son tas d'après la limite du conteneur (MaxRAMPercentage),
 # la limite est donc réaliste dès le départ (768Mi) pour ne pas fausser la mesure.
-# Provisoire jusqu'à la partie 3 (TLS) et 4 (issuer public) : HTTP interne, nom d'hôte non strict.
+# Partie 4 : nom d'hôte public fixe (issuer des jetons), TLS terminé par Traefik (HTTP dans le cluster),
+# console d'administration jointe seulement par tunnel (kubectl port-forward) sur http://localhost:8180.
+# Secret supplémentaire pour les comptes de test (utilisé par 72-configurer-realm.sh, pas par ce pod) :
+#   keycloak-test-users : AUTEUR_PASSWORD, ABONNE_PASSWORD
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,6 +17,9 @@ metadata:
     app: keycloak
 spec:
   replicas: 1
+  # Pas de mise à jour progressive : deux Keycloak de 768Mi ne tiennent pas dans la RAM du VPS.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: keycloak
@@ -52,12 +58,20 @@ spec:
                 secretKeyRef:
                   name: keycloak-secrets
                   key: KC_BOOTSTRAP_ADMIN_PASSWORD
+            # Issuer public : identique dans les jetons quelle que soit l'adresse utilisée (publique ou interne).
+            - name: KC_HOSTNAME
+              value: https://auth.epouvante.menuly-app.com
+            # Console d'administration : uniquement par tunnel depuis le poste (non routée par l'Ingress).
+            - name: KC_HOSTNAME_ADMIN
+              value: http://localhost:8180
+            # TLS terminé par Traefik : HTTP seulement à l'intérieur du cluster.
             - name: KC_HTTP_ENABLED
               value: "true"
             - name: KC_PROXY_HEADERS
               value: xforwarded
-            - name: KC_HOSTNAME_STRICT
-              value: "false"
+            # En-têtes X-Forwarded-* acceptés seulement depuis le réseau des pods (Traefik).
+            - name: KC_PROXY_TRUSTED_ADDRESSES
+              value: 10.42.0.0/16
             - name: KC_HEALTH_ENABLED
               value: "true"
             - name: KC_METRICS_ENABLED
