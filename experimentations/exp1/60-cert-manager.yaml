@@ -1,0 +1,51 @@
+# Expérience 1, partie 3 — cert-manager, installé par le contrôleur Helm intégré à K3s (pas de Helm sur le VPS).
+# Composant à l'échelle du cluster : namespace cert-manager, hors sandbox (la suppression de sandbox ne le supprime pas).
+# Version figée : dernière version stable au 2026-10-28 (releases GitHub, publiée le 2026-10-23).
+# Limites mémoire larges : on mesure la consommation réelle avant de fixer les vraies limites.
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: cert-manager
+  namespace: kube-system
+spec:
+  repo: https://charts.jetstack.io
+  chart: cert-manager
+  version: v1.21.3
+  targetNamespace: cert-manager
+  createNamespace: true
+  valuesContent: |-
+    crds:
+      enabled: true
+      # Les CRD survivent à une désinstallation du chart : pas de suppression en cascade des certificats.
+      keep: true
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+    webhook:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
+    cainjector:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
+    startupapicheck:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi

@@ -1,0 +1,113 @@
+# Expérience 1, partie 3 — application de test derrière les deux sous-domaines, pour obtenir les certificats.
+# Keycloak n'est pas exposé ici (partie 4) : auth.epouvante.menuly-app.com pointe provisoirement vers whoami.
+# Émetteur staging d'abord ; passage en production en remplaçant l'annotation par letsencrypt-prod.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: whoami
+  namespace: sandbox
+  labels:
+    app: whoami
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: whoami
+  template:
+    metadata:
+      labels:
+        app: whoami
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: whoami
+          image: traefik/whoami:v1.12.0
+          # Port non privilégié : le processus ne tourne pas en root.
+          args: ["--port", "8080"]
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 32Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: whoami
+  namespace: sandbox
+spec:
+  selector:
+    app: whoami
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: whoami-epouvante
+  namespace: sandbox
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - epouvante.menuly-app.com
+      secretName: epouvante-tls
+  rules:
+    - host: epouvante.menuly-app.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: whoami
+                port:
+                  name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: whoami-auth
+  namespace: sandbox
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - auth.epouvante.menuly-app.com
+      secretName: auth-epouvante-tls
+  rules:
+    - host: auth.epouvante.menuly-app.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: whoami
+                port:
+                  name: http
