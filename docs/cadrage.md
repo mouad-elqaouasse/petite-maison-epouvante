@@ -83,7 +83,13 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
       services → PostgreSQL/RabbitMQ/Keycloak, DNS (CoreDNS), Prometheus → services, `troc-service` → Internet (Cloudinary),
       Flux → GitHub/GHCR ;
     - Traefik seul point d'entrée ; console d'administration Keycloak non publique (`kubectl port-forward`) ;
-    - en-têtes de sécurité (HSTS, CSP, `X-Content-Type-Options`) et rate limiting sur `POST /annonces` (sans bloquer JMeter) ;
+    - en-têtes de sécurité (HSTS, CSP, `X-Content-Type-Options`) ;
+    - rate limiting (décision du 28/10/2026) :
+      - appliqué **uniquement à `POST /annonces`** ;
+      - mis en place **après la correction de l'IP client** (`externalTrafficPolicy: Local` sur le service Traefik) : sans elle,
+        Traefik voit tous les clients sous une seule adresse interne (`10.42.0.1`, expérience 1 partie 3) ;
+      - pendant les campagnes JMeter, l'IP de la machine de test est exemptée ;
+      - prouvé par un test séparé : envoi rapide de requêtes depuis une même IP, réponse **429** attendue après la limite ;
     - requests/limits sur chaque pod ;
     - pare-feu du VPS : seuls 22, 80, 443 ouverts ; 6443 (API K3s) fermé, `kubectl` via tunnel SSH ; SSH par clé uniquement.
 15. **Secrets** : `.env` local (ignoré par git) ; sur le VPS, Secret Kubernetes créé une fois à la main depuis un `.env` jamais commité ;
