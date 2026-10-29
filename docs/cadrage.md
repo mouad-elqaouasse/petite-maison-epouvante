@@ -142,6 +142,9 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
 19. **Dépôt** : monorepo (`troc-service/`, `notification-service/`, `front/`, `deploy/`, `e2e/`, `load/`, `docs/`) ;
     trunk-based, PR courtes (une par ticket), `main` protégée (tous les contrôles verts), workflows filtrés par chemin,
     Conventional Commits, lien vers le ticket dans chaque PR, images taguées avec le SHA du commit.
+20. **Versions** (décision du 29/10/2026, expérience 3) : Java 25 (LTS, version à support long terme) pour `troc-service`,
+    `notification-service` et l'application de test ; Spring Boot 4.1 ; Maven Wrapper (`mvnw`) dans chaque projet,
+    pour ne dépendre d'aucun Maven installé (poste ou CI).
 
 ## 2. Backlog (chaque story inclut son écran Angular minimal)
 
