@@ -152,3 +152,74 @@ Constats :
 - Le SHA affiché est celui du commit testé (`113f355`), pas celui du commit du bot (`f5f118d`) : c'est voulu,
   l'image porte le SHA du code qu'elle contient.
 - Certificat `epouvante-tls` repris sans réémission.
+
+## Étape 6 — Bout en bout : un push sur main, aucune intervention
+Commande (poste) : 3 commits poussés ensemble (`61a2891` Flux, `da6c316` journal, `13ffc4a` texte de la page) ;
+surveillance de `https://epouvante.menuly-app.com/version` toutes les 5 s et des runs par l'API publique de GitHub.
+Résultat :
+```
+16:06:24 push (13ffc4a)          16:06:29 début du run 40908276511
+16:07:56 commit du bot f793610   16:08:41 vérification HTTPS du workflow réussie (43 s après le commit du bot)
+16:08:43 SHA 13ffc4a vu en ligne depuis le poste ; page « … livré par Flux » ; secretPresent: true
+Run en succès (16:09:02) ; runs du dépôt : 2 au total → aucun run après le commit du bot
+```
+Constats :
+- Push → nouvelle version en ligne en HTTPS : **2 min 19 s**, sans aucune action manuelle (objectif 5 atteint).
+- Répartition : CI jusqu'au commit du bot 1 min 32 s ; détection par Flux (intervalle 1 min) + déploiement ≈ 45 s.
+- Pas de boucle confirmée une deuxième fois. Les 3 commits partant dans un seul push, le commit Flux (hors filtre de
+  chemins) n'est pas un contrôle séparé : GitHub évalue le filtre sur l'ensemble du push.
+
+## Étape 7 — RAM de Flux
+Commande : `kubectl -n flux-system top pods` ; réconciliation forcée (annotation `reconcile.fluxcd.io/requestedAt`
+sur le GitRepository) ; nouvelle lecture 20 s après ; `memory.current` et `memory.peak` du cgroup de chaque pod sur l'hôte
+(images sans shell).
+Résultat :
+```
+16:12:31 repos            : kustomize-controller 31Mi, source-controller 21Mi → 52 Mio
+16:12:52 après réconciliation : 29Mi + 21Mi → 50 Mio
+memory.peak depuis le démarrage (installation, 2 déploiements, réconciliation) : kustomize 71Mi, source 29Mi → ≤ 100 Mio
+free : 1,3 Gio disponibles (1,5 Gio avant l'expérience, avec exp3-hello en plus), swap inchangé (81 Mio)
+```
+Constats :
+- Flux (2 contrôleurs) : **≈ 50 Mio au repos, ≤ 100 Mio au pic**, pour 200 Mio prévus au budget (`docs/cadrage.md` §1.4.18).
+- Le pic vient de kustomize-controller (construction et application des manifests) ; avec les manifests de `app`
+  (plus nombreux), il sera à remesurer.
+
+## Étape 8 — Vérification des secrets (poste)
+Commandes :
+```bash
+docker run --rm -v "$(pwd -W)":/repo ghcr.io/gitleaks/gitleaks:v8.30.1 git /repo --redact --no-banner -v
+git log --all -p | grep -ciE "DEMO_SECRET=[0-9a-f]{8}"
+git log --all --name-only --format= | grep -iE "\.env|kubeconfig|\.pem|\.key$"
+docker image inspect ghcr.io/…/exp3-hello:13ffc4a… --format '{{json .Config.Env}}' ; docker history --no-trunc …
+```
+Résultat :
+```
+gitleaks : 35 commits scannés, no leaks found (code 0)
+Aucune valeur DEMO_SECRET ni aucun fichier .env, kubeconfig, .pem ou .key dans l'historique
+Image publiée : variables PATH, SSL_CERT_FILE, LANG, JAVA_VERSION, GIT_SHA, JAVA_TOOL_OPTIONS ; aucune trace de secret
+```
+Constats : la valeur du secret n'a jamais quitté le VPS ; dépôt et image publics ne contiennent que son nom (objectif 4).
+
+## Étape 9 — Nettoyage (Flux conservé pour `app`, décision du 2026-10-29)
+Commande :
+```bash
+ssh ubuntu@51.178.39.218 'kubectl -n flux-system delete kustomization exp3-hello --wait && kubectl -n flux-system delete gitrepository petite-maison && kubectl -n sandbox delete secret exp3-hello && rm -rf ~/exp3-flux'
+```
+Résultat (16:18:40 → 16:18:50 UTC) :
+```
+Kustomization et GitRepository supprimés ; prune : Deployment, Service, Ingress, NetworkPolicy, 2 Middleware de exp3-hello supprimés
+Dernier pod exp3-hello en « Error » pendant l'arrêt (fin de la JVM au SIGTERM), disparu 10 s plus tard
+sandbox : 6 pods d'origine Running ; Ingress keycloak seul ; Secret epouvante-tls conservé
+flux-system : 2 contrôleurs Running, aucun GitRepository ni Kustomization ; free : 1,4 Gio disponibles
+```
+Constats :
+- `prune` fait le ménage : supprimer la Kustomization retire tout ce que Flux avait créé.
+- Événements du dernier pod : sonde de démarrage en échec à T+29 s et T+32 s (connexion refusée puis délai dépassé),
+  pod prêt ensuite. Démarrage d'environ 30 s sur le VPS avec 500m de CPU (1,6 s sur le poste) : à prendre en compte pour la
+  `startupProbe` des services (ici 60 s de marge).
+- Conservés : contrôleurs Flux et NetworkPolicies de `flux-system` (pour `app`) ; pod et Service `whoami` (sans Ingress).
+- Workflow `exp3-hello` : déclencheur `push` retiré, lancement manuel (`workflow_dispatch`) seulement.
+
+## Rapport final
+Rédigé : `docs/experimentations/exp3-livraison-continue-rapport.md` (2026-10-29). **Expérience 3 terminée.**
