@@ -27,7 +27,13 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
    (id, catégorie, auteur, titre, date, URL photo) sans connaître les destinataires.
 8. **Livraison « au moins une fois »** :
    - producteur : publication après commit (`@TransactionalEventListener(AFTER_COMMIT)`), publisher confirms, messages et files durables ;
-   - consommateur : ack après écriture en base, unicité `(membreId, annonceId, type)` (idempotence), 3 tentatives puis DLQ (dead letter queue).
+     latence de la confirmation mesurée pendant les campagnes de charge (indicateur 3) ; confirmations asynchrones si elle pèse
+     sur `POST /annonces` (décision du 29/10/2026, expérience 2) ;
+   - consommateur : ack après écriture en base, unicité `(membreId, annonceId, type)` (idempotence), 3 réessais (4 livraisons
+     au total) puis DLQ (dead letter queue) ;
+   - file quorum avec `x-delivery-limit=3` ; un message en échec est rejeté par `basic.reject` avec remise en file (ou retry
+     Spring puis rejet sans remise en file), **jamais par `basic.nack`** : depuis RabbitMQ 4.3, `nack` ne compte pas pour la
+     limite et le message boucle sans fin (décision du 29/10/2026, `docs/experimentations/exp2-rabbitmq-rapport.md`).
    - Limite assumée : perte possible entre commit et publication (voir remédiation, outbox).
 9. **Authentification / autorisation** [Q3] :
    - Angular, client public : Authorization Code + PKCE (Proof Key for Code Exchange) avec **keycloak-angular** ; jeton en mémoire,
@@ -121,7 +127,7 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
 | cert-manager (3 pods) | 1 | 96 / 256 Mio cumulés (ADR 0001) | 76 Mio | 80 Mio |
 | Keycloak | 1 | 512 / 768 Mio | 549 à 590 Mio | 600 Mio |
 | PostgreSQL (une instance, une base par service) | 1 | 64 / 256 Mio | 45 Mio | 80 Mio |
-| RabbitMQ | 1 | 128 / 256 Mio | 83 Mio | 120 Mio (à confirmer, exp. 2) |
+| RabbitMQ (sonde `tcpSocket`, exp. 2) | 1 | 128 / 256 Mio | 83 Mio (exp. 2 : 95 Mio, 126 avec 10 000 messages) | 130 Mio |
 | Prometheus | 1 | 64 / 256 Mio | 40 Mio | 100 Mio |
 | Grafana | 1 | 128 / 256 Mio | 208 Mio (mémoire propre) | 220 Mio |
 | kube-state-metrics | 1 | 32 / 64 Mio | — | 30 Mio |
@@ -129,7 +135,7 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
 | Front nginx | 1 | 16 / 32 Mio | — | 10 Mio |
 | troc-service (`MaxRAMPercentage=75`) | 1–3 | 256 / 384 Mio | — | 3 × 250 = 750 Mio |
 | notification-service | 1 (fixe) | 256 / 320 Mio | — | 250 Mio |
-| **Total au pic** | | | | **≈ 3 690 Mio** (marge ≈ 100 Mio, swap de 2 Go en tampon) |
+| **Total au pic** | | | | **≈ 3 700 Mio** (marge ≈ 90 Mio, swap de 2 Go en tampon) |
 
     Plan B : si la marge mesurée pendant les tests de charge est insuffisante (swap qui monte ou pod tué par manque de
     mémoire, `OOMKilled`), le HPA de `troc-service` passe à 2 replicas maximum.
@@ -144,7 +150,7 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
 | US1a | En tant que membre, je publie une annonce de troc avec sa photo (de bout en bout, `StockagePhoto` en mémoire) | troc | 201 si valide ; 400 si invalide ; **400 sans photo** ; photo > 2 Mo ou format non autorisé → 400 ; 401 sans jeton ; auteur tiré du JWT ; annonce visible dans la liste |
 | US1b | Branchement de Cloudinary derrière `StockagePhoto` | troc | photo stockée, `publicId`/URL enregistrés ; suppression si l'enregistrement échoue ; clé lue depuis le secret |
 | US2 | En tant que membre, je gère mes catégories d'intérêt | notification | ajout/retrait ; catégorie inconnue → 400 |
-| US3 | En tant que membre, je suis notifié d'une nouvelle annonce | notification | auteur → `CONFIRMATION` ; abonné → `ALERTE` ; non-abonné → rien ; auteur abonné → seulement `CONFIRMATION` ; message en double → une seule notification |
+| US3 | En tant que membre, je suis notifié d'une nouvelle annonce | notification | auteur → `CONFIRMATION` ; abonné → `ALERTE` ; non-abonné → rien ; auteur abonné → seulement `CONFIRMATION` ; message en double → une seule notification ; message en échec → DLQ après 4 livraisons (Testcontainers, RabbitMQ ≥ 4.3) |
 | US4 | En tant que membre, je consulte mes notifications et les marque comme lues | notification | je ne vois que les miennes ; marquer celle d'un autre → 404 |
 | US5 | En tant que modérateur, je retire une annonce | troc | modérateur → `RETIREE`, invisible ; `USER` → 403 |
 

@@ -2,7 +2,8 @@
 
 - Statut : acceptée
 - Date : 2026-10-29
-- Source des mesures : `docs/experimentations/exp1-socle-k3s-rapport.md` (parties 1, 2, 5A et §9)
+- Source des mesures : `docs/experimentations/exp1-socle-k3s-rapport.md` (parties 1, 2, 5A et §9) ;
+  RabbitMQ : `docs/experimentations/exp2-rabbitmq-rapport.md` (§5, §9 ; mise à jour du 2026-10-29)
 
 ## Contexte
 
@@ -17,7 +18,11 @@
 
 1. **HPA de `troc-service` : 1 → 3 replicas** (le service exposé à la charge de la démonstration).
 2. **`notification-service` fixé à 1 replica**, sans HPA.
-3. Budget au pic estimé à ≈ 3 690 Mio, détaillé dans `docs/cadrage.md` §1.4.18 ; requests et limits fixées pour chaque pod.
+3. Budget au pic estimé à ≈ 3 700 Mio, détaillé dans `docs/cadrage.md` §1.4.18 ; requests et limits fixées pour chaque pod.
+   **RabbitMQ : 128 / 256 Mio, 130 Mio au pic, sonde de disponibilité `tcpSocket` sur le port 5672** (mise à jour du
+   2026-10-29, expérience 2) : la sonde `rabbitmq-diagnostics` lance une seconde VM Erlang dans le conteneur
+   (+60 Mio toutes les 20 s, pic observé à 270 Mio avec une commande `rabbitmqctl`), ce qui dépasserait la limite.
+   `rabbitmqctl` est réservé au diagnostic ponctuel.
 4. **Plan B** : si la marge mesurée pendant les tests de charge est insuffisante (swap qui monte, ou pod tué par manque de
    mémoire, `OOMKilled`), le HPA de `troc-service` passe à **2 replicas maximum**.
 
@@ -31,8 +36,11 @@
 
 ## Conséquences
 
-- Marge d'environ 100 Mio au pic, le swap de 2 Go servant de tampon : la RAM disponible et le swap sont suivis dans Grafana
+- Marge d'environ 90 Mio au pic, le swap de 2 Go servant de tampon : la RAM disponible et le swap sont suivis dans Grafana
   pendant chaque campagne de charge.
 - La consommation des notifications ne monte pas en charge : la file RabbitMQ peut s'allonger sous charge ; c'est sa
   vidange qui est montrée en soutenance (`docs/cadrage.md` §1.4.17).
-- Estimations à confirmer : JVM Spring Boot (≈ 250 Mio par replica), RabbitMQ (expérience 2), Flux (expérience 3).
+- Estimations à confirmer : JVM Spring Boot (≈ 250 Mio par replica), Flux (expérience 3). RabbitMQ confirmé par
+  l'expérience 2 (95 Mio au repos, 126 Mio avec 10 000 messages en attente).
+- Une sonde `tcpSocket` vérifie seulement que le port AMQP répond, pas la santé interne du broker : écart accepté pour
+  le POC, la santé du broker restant suivie par son plugin Prometheus.

@@ -124,7 +124,7 @@ de 19 flux est conforme (0 écart) après redémarrage des pods ; coût en RAM n
 | cert-manager + Let's Encrypt | **Adopté** | 76 Mio, émission < 30 s (ADR 0001) |
 | Keycloak | **Adopté sous condition** | fonctionnel, mais le plus gros poste de RAM : image optimisée et administrateur permanent à faire |
 | PostgreSQL | **Adopté** | 45 Mio au repos, une instance pour toutes les bases |
-| RabbitMQ | **Adopté sous condition de l'expérience 2** | 83 Mio au repos et non-root ; fiabilité (confirms, ack, DLQ) à tester |
+| RabbitMQ | **Adopté** (après l'expérience 2) | 83 Mio au repos et non-root ; confirms, ack, DLQ et absence de perte validés par l'expérience 2 (`docs/experimentations/exp2-rabbitmq-rapport.md`) |
 | Prometheus | **Adopté** | 40 Mio pour 5 100 séries |
 | Grafana | **Adopté** | 208 Mio de mémoire propre, à condition de désactiver les plugins préinstallés |
 | metrics-server + HPA | **Adopté** | montée en 38 s, descente en 313 s, conformes aux valeurs par défaut |

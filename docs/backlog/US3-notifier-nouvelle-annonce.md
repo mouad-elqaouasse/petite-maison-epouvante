@@ -53,7 +53,7 @@ Fonctionnalité: Notifier les membres d'une nouvelle annonce
     Étant donné que l'enregistrement des notifications échoue
     Quand un événement "AnnoncePubliee" est reçu
     Alors le message n'est pas acquitté
-    Et il est retenté 3 fois
+    Et il est retenté 3 fois (4 livraisons au total)
     Et il est ensuite placé dans la DLQ (dead letter queue, file des messages en échec)
 ```
 
@@ -69,4 +69,7 @@ Le marquage « lue » est ajouté par US4.
 - La lecture `GET /notifications` est introduite ici sous une forme minimale (notifications du membre connecté, d'après le `sub` du jeton), car les tests d'acceptation en ont besoin ; US4 en complète les règles (décision validée le 27/10/2026).
 - Garanties de livraison : ack après écriture en base, unicité `(membreId, annonceId, type)`, messages et files durables (`cadrage.md` §1.2 point 8).
 - Le scénario DLQ relève plutôt d'un test d'intégration (Testcontainers RabbitMQ) que d'un test boîte noire.
+  Il tourne sur la même version que le cluster (RabbitMQ 4.4.0, donc ≥ 4.3) : un message en échec doit être rejeté par
+  `basic.reject` ou après un retry Spring, jamais par `basic.nack` avec remise en file, qui boucle sans fin depuis 4.3
+  (`cadrage.md` §1.2 point 8 ; `docs/experimentations/exp2-rabbitmq-rapport.md` §6).
 - Hors périmètre : e-mail, push, WebSocket ; mise à jour des notifications d'une annonce retirée (`cadrage.md` §6).
