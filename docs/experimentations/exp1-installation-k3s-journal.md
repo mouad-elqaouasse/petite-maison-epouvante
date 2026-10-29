@@ -1380,12 +1380,12 @@ Les anciennes parties 5 (HPA) et 6 (NetworkPolicies) du plan sont traitées ense
 - **Parties A (HPA) et B (NetworkPolicies) terminées** : cpu-demo supprimé ; tableau de bord « Démo HPA » toujours
   provisionné dans Grafana.
 - **Règles appliquées dans `sandbox`** : 15 règles (fichiers 90 à 96), matrice à 0 écart après redémarrage des pods (B9).
-- **Prochaine étape** : commits de fin de partie B, puis partie C (bilan final de l'expérience 1), puis nettoyage.
+- **Prochaine étape** : partie C (bilan final de l'expérience 1), puis nettoyage. Partie B commitée.
+- **Nettoyage (décision du 2026-10-29)** : le namespace `sandbox` est **conservé** pour les expériences 2 et 3 ; seuls les
+  deux pods `np-intrus` (namespaces `sandbox` et `default`) seront supprimés.
 - **Points d'attention** :
-  - Pod `np-intrus` du namespace `default` : à supprimer au nettoyage (hors `sandbox`).
+  - `73-verifier-jetons.sh` corrigé : code de sortie non nul en cas d'écart dans le pod (non encore relancé sur le VPS).
   - Tunnels : `ssh -t` obligatoire. Scripts longs : `nohup` sur le VPS.
-  - Non commités : `80`, `81`, `90` à `98`, `50-grafana.yaml`, `51-dashboard-demo-hpa.json`, `73-verifier-jetons.sh`
-    (modifié en B8) (commit `chore`), et ce journal (commit `docs`). À valider (fichiers et messages) avant commit.
 
 Objectifs :
 1. HPA (Horizontal Pod Autoscaler) : application de démonstration consommant du CPU, 1 à 3 replicas, charge générée depuis le
@@ -1801,11 +1801,13 @@ Constats :
 - Démarrage des services sous refus total : environ 1 s pendant laquelle toute connexion est refusée (partie 5, étape B8).
   `troc-service` et `notification-service` doivent réessayer leurs premières connexions (PostgreSQL, RabbitMQ, JWKS de Keycloak)
   au lieu d'échouer.
-- `73-verifier-jetons.sh` : code de sortie 0 même en cas d'écart, à corriger avant de s'en servir comme test.
+- `73-verifier-jetons.sh` : code de sortie désormais non nul en cas d'écart dans le pod (partie F) ; les tests A à D
+  affichent les codes sans les comparer à un attendu.
 
 ### Nettoyage en fin d'expérience
-- Supprimer le namespace `sandbox` (whoami, Ingress, Secrets TLS et toute la stack de la partie 2).
-- Supprimer `ClusterRole` et `ClusterRoleBinding` `sandbox-prometheus` (hors namespace, voir partie 2).
+- Supprimer les deux pods `np-intrus` (namespaces `sandbox` et `default`).
+- Namespace `sandbox` **conservé** pour les expériences 2 et 3 (décision du 2026-10-29), donc aussi le `ClusterRole` /
+  `ClusterRoleBinding` `sandbox-prometheus` utilisé par sa stack.
 - cert-manager, son `HelmChart` dans `kube-system` et les deux `ClusterIssuer` sont **conservés** pour `app`
   (`docs/adr/0001-conserver-cert-manager.md`).
 
