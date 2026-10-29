@@ -9,4 +9,4 @@ resources:
   - np-hello.yaml
 images:
   - name: ghcr.io/mouad-elqaouasse/petite-maison-epouvante/exp3-hello
-    newTag: a-remplacer-par-la-ci
+    newTag: "113f355b14827a89ff112335a9d52f3ef0d4510e"
