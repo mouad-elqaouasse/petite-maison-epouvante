@@ -1,0 +1,79 @@
+# Expérience 2, étape 6 — NATS avec JetStream, RAM au repos seulement (pas de test fonctionnel, docs/cadrage.md §3.2 « Could »).
+# Aucune NetworkPolicy : aucun client ; les sondes du kubelet ne sont pas filtrées (exp1/90).
+# JetStream borné (64 Mo en mémoire, 1 Go sur disque) : sans borne, il réserve par défaut 75 % de la RAM du nœud.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nats-config
+  namespace: sandbox
+data:
+  nats.conf: |
+    port: 4222
+    http_port: 8222
+    jetstream {
+      store_dir: /data
+      max_mem: 64M
+      max_file: 1G
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nats
+  namespace: sandbox
+  labels:
+    app: nats
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nats
+  template:
+    metadata:
+      labels:
+        app: nats
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: nats
+          image: nats:2.15.2-alpine
+          args: ["-c", "/etc/nats/nats.conf"]
+          ports:
+            - name: client
+              containerPort: 4222
+            - name: monitoring
+              containerPort: 8222
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: monitoring
+            periodSeconds: 20
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nats
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: config
+          configMap:
+            name: nats-config
+        - name: data
+          emptyDir: {}

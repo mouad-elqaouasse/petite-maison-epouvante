@@ -1,0 +1,46 @@
+# Expérience 2 — Job unique : déclaration des exchanges, files et liaisons avec le compte admin (secret de l'exp. 1).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: exp2-topologie
+  namespace: sandbox
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        groupe: exp2
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: topologie
+          image: exp2-amqp:2
+          imagePullPolicy: Never
+          command: ["python", "/app/topologie.py"]
+          env:
+            - name: RABBITMQ_UTILISATEUR
+              value: admin
+            - name: RABBITMQ_MOT_DE_PASSE
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-secrets
+                  key: RABBITMQ_DEFAULT_PASS
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

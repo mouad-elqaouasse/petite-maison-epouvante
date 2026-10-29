@@ -1,0 +1,51 @@
+# Expérience 2 — consommateur permanent.
+# Lancé par « sh -c '...; exit $?' » : python n'est pas le PID 1, donc « pkill -9 » le tue vraiment (un PID 1 ignore
+# SIGKILL envoyé depuis son propre namespace) ; le conteneur s'arrête puis Kubernetes le redémarre (panne de l'étape 4).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: exp2-consommateur
+  namespace: sandbox
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: exp2-consommateur
+  template:
+    metadata:
+      labels:
+        app: exp2-consommateur
+        groupe: exp2
+    spec:
+      terminationGracePeriodSeconds: 5
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: consommateur
+          image: exp2-amqp:2
+          imagePullPolicy: Never
+          command: ["sh", "-c", "python /app/consommateur.py; exit $?"]
+          envFrom:
+            - secretRef:
+                name: exp2-consommateur
+          env:
+            - name: TRAITEMENT_MS
+              value: "100"
+            - name: PREFETCH
+              value: "10"
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

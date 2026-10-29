@@ -1,0 +1,42 @@
+# Expérience 2 — NetworkPolicies : pods de test (label groupe=exp2) → RabbitMQ AMQP (5672).
+# Sous refus total (exp1/90), il faut ouvrir les deux côtés : sortie des clients, entrée de RabbitMQ.
+# Le DNS est déjà ouvert à tous les pods de sandbox (exp1/91).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: exp2-sortie-rabbitmq
+  namespace: sandbox
+spec:
+  podSelector:
+    matchLabels:
+      groupe: exp2
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: rabbitmq
+      ports:
+        - protocol: TCP
+          port: 5672
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rabbitmq-entree-exp2
+  namespace: sandbox
+spec:
+  podSelector:
+    matchLabels:
+      app: rabbitmq
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              groupe: exp2
+      ports:
+        - protocol: TCP
+          port: 5672
