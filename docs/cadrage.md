@@ -87,7 +87,8 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
       `allowPrivilegeEscalation: false`, `capabilities: drop: ALL` ;
     - NetworkPolicies, ajoutées **en dernier, une par une**, application fonctionnelle : refus par défaut dans `app`, puis Traefik → front/API,
       services → PostgreSQL/RabbitMQ/Keycloak, DNS (CoreDNS), Prometheus → services, `troc-service` → Internet (Cloudinary),
-      Flux → GitHub/GHCR ;
+      Flux → GitHub (443 hors cluster) et API K3s dans `flux-system` ; aucune règle vers GHCR : les images sont téléchargées
+      par containerd sur le nœud, hors du champ des NetworkPolicies (décision du 29/10/2026, expérience 3) ;
     - Traefik seul point d'entrée ; console d'administration Keycloak non publique (`kubectl port-forward`) ;
     - en-têtes de sécurité (HSTS, CSP, `X-Content-Type-Options`) ;
     - redirection HTTP → HTTPS et HSTS portées par des middlewares Traefik sur chaque Ingress de `app` (décision du 29/10/2026) :
@@ -101,7 +102,8 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
     - requests/limits sur chaque pod ;
     - pare-feu du VPS : seuls 22, 80, 443 ouverts ; 6443 (API K3s) fermé, `kubectl` via tunnel SSH ; SSH par clé uniquement.
 15. **Secrets** : `.env` local (ignoré par git) ; sur le VPS, Secret Kubernetes créé une fois à la main depuis un `.env` jamais commité ;
-    les manifests Flux ne référencent que le nom du secret ; jetons CI (SonarCloud, GHCR) dans les secrets GitHub Actions.
+    les manifests Flux ne référencent que le nom du secret ; jeton SonarCloud dans les secrets GitHub Actions ; GHCR utilise
+    le `GITHUB_TOKEN` du workflow (aucun secret à créer, expérience 3).
 16. **Observabilité** [E2, Q1] :
     - métriques : Micrometer (`/actuator/prometheus`, non exposé par l'Ingress), plugin Prometheus de RabbitMQ, kube-state-metrics ;
     - logs JSON sur stdout, `correlationId` créé à l'entrée et propagé dans l'en-tête de `AnnoncePubliee` ;
@@ -117,7 +119,9 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
     - HPA sur le CPU : `troc-service` 1→3 replicas, `notification-service` fixé à 1 replica (budget RAM, `docs/adr/0005-budget-ram-et-hpa.md`) ;
     - paramètres du HPA (décision du 29/10/2026) : `autoscaling/v2`, cible 50 % du CPU demandé, fenêtres de stabilisation par défaut
       (montée immédiate, descente après 300 s), validés en expérience 1 (montée en 38 s, descente en 313 s) ;
-    - démonstration : replicas qui montent/descendent, file RabbitMQ qui se vide, suppression d'un pod sous charge (probes readiness/liveness).
+    - démonstration : replicas qui montent/descendent, file RabbitMQ qui se vide, suppression d'un pod sous charge (probes readiness/liveness) ;
+    - `startupProbe` des services dimensionnée pour un démarrage d'environ 30 s à 500m de CPU (mesuré en expérience 3,
+      contre 1,6 s sur le poste), en plus des sondes readiness/liveness (décision du 29/10/2026).
 18. **Budget RAM** (révisé le 29/10/2026 d'après l'expérience 1, `docs/experimentations/exp1-socle-k3s-rapport.md` ;
     décision : `docs/adr/0005-budget-ram-et-hpa.md`). RAM utilisable du VPS : 3 788 Mio.
 
@@ -131,17 +135,20 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
 | Prometheus | 1 | 64 / 256 Mio | 40 Mio | 100 Mio |
 | Grafana | 1 | 128 / 256 Mio | 208 Mio (mémoire propre) | 220 Mio |
 | kube-state-metrics | 1 | 32 / 64 Mio | — | 30 Mio |
-| Flux | — | — | exp. 3 | 200 Mio |
+| Flux (source- et kustomize-controller) | 1 chacun | 64 / 256 Mio par contrôleur | ≈ 50 Mio (exp. 3) | 100 Mio |
 | Front nginx | 1 | 16 / 32 Mio | — | 10 Mio |
 | troc-service (`MaxRAMPercentage=75`) | 1–3 | 256 / 384 Mio | — | 3 × 250 = 750 Mio |
 | notification-service | 1 (fixe) | 256 / 320 Mio | — | 250 Mio |
-| **Total au pic** | | | | **≈ 3 700 Mio** (marge ≈ 90 Mio, swap de 2 Go en tampon) |
+| **Total au pic** | | | | **≈ 3 600 Mio** (marge ≈ 190 Mio après l'expérience 3, swap de 2 Go en tampon) |
 
     Plan B : si la marge mesurée pendant les tests de charge est insuffisante (swap qui monte ou pod tué par manque de
     mémoire, `OOMKilled`), le HPA de `troc-service` passe à 2 replicas maximum.
 19. **Dépôt** : monorepo (`troc-service/`, `notification-service/`, `front/`, `deploy/`, `e2e/`, `load/`, `docs/`) ;
     trunk-based, PR courtes (une par ticket), `main` protégée (tous les contrôles verts), workflows filtrés par chemin,
     Conventional Commits, lien vers le ticket dans chaque PR, images taguées avec le SHA du commit.
+    Livraison (décision du 29/10/2026, expérience 3) : la CI écrit le SHA dans le manifest de `deploy/` et le commite sur `main`
+    (`github-actions[bot]`, autorisé à contourner la protection de `main` pour ce seul commit) ; Flux lit le dépôt public en
+    HTTPS anonyme, sans clé dans le cluster ; pas de boucle (push par `GITHUB_TOKEN`, `deploy/**` hors du filtre de chemins).
 20. **Versions** (décision du 29/10/2026, expérience 3) : Java 25 (LTS, version à support long terme) pour `troc-service`,
     `notification-service` et l'application de test ; Spring Boot 4.1 ; Maven Wrapper (`mvnw`) dans chaque projet,
     pour ne dépendre d'aucun Maven installé (poste ou CI).
@@ -227,7 +234,8 @@ Namespace `sandbox`, supprimé après usage, jamais en même temps que `app` si 
 
 ## 7. Questions ouvertes
 - Valeur de N pour l'indicateur 3 : à calibrer lors de la première campagne de charge (expérience 1).
-- Mode de suivi des nouvelles images par Flux (image automation ou mise à jour du manifest par la CI) : expérience 3.
+- ~~Mode de suivi des nouvelles images par Flux (image automation ou mise à jour du manifest par la CI) : expérience 3.~~
+  Tranché le 29/10/2026 : mise à jour du manifest par la CI (§1.4.19, `docs/experimentations/exp3-livraison-continue-rapport.md`).
 - ~~Budget RAM réel et éventuel plan B : expérience 1.~~ Tranché le 29/10/2026 (§1.4.18, `docs/adr/0005-budget-ram-et-hpa.md`).
 
 ## 8. Liste pour le plan de remédiation
