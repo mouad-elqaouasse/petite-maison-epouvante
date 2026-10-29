@@ -29,7 +29,7 @@ class VersionController {
     @GetMapping(value = "/", produces = MediaType.TEXT_HTML_VALUE)
     String hello() {
         return "<!doctype html><html lang=\"fr\"><head><meta charset=\"utf-8\"><title>Hello</title></head>"
-                + "<body><h1>Hello depuis la Petite Maison de l'Épouvante</h1>"
+                + "<body><h1>Hello depuis la Petite Maison de l'Épouvante, livré par Flux</h1>"
                 + "<p>Version : <code>" + HtmlUtils.htmlEscape(sha) + "</code></p></body></html>";
     }
 }
