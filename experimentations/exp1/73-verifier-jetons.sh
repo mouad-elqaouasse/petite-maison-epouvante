@@ -84,10 +84,11 @@ set -u
 INTERNE=http://keycloak.sandbox.svc:8080/realms/epouvante-test
 PUBLIC=https://auth.epouvante.menuly-app.com/realms/epouvante-test
 cd /tmp
+ecarts=0
 verifier() { # $1 libellé, $2 attendu (VALIDE|REFUSE), $3 jeton, $4 issuer, $5 audience
   if printf '%s' "$3" | step crypto jwt verify --jwks jwks.json --iss "$4" --aud "$5" >/dev/null 2>err.txt
   then obtenu=VALIDE; else obtenu="REFUSE ($(head -c 120 err.txt | tr '\n' ' '))"; fi
-  case "$obtenu" in "$2"*) bilan=OK ;; *) bilan=ECART ;; esac
+  case "$obtenu" in "$2"*) bilan=OK ;; *) bilan=ECART; ecarts=$((ecarts + 1)) ;; esac
   echo "[$bilan] $1 : attendu $2, obtenu $obtenu"
 }
 
@@ -100,7 +101,7 @@ for essai in $(seq 0 30); do
   sleep 1
 done
 if [ "$jwks_ok" = 1 ]; then echo "obtenu après $essai s d'attente (essai n° $((essai + 1)))"
-else echo "toujours refusé après 30 s"; fi
+else echo "[ECART] toujours refusé après 30 s"; ecarts=$((ecarts + 1)); fi
 echo "clés : $(jq -c '[.keys[] | {kid, alg, use}]' jwks.json)"
 printf '%s' "$JETON" | step crypto jwt inspect --insecure > jeton.json
 echo "kid du jeton : $(jq -r .header.kid jeton.json) ; alg : $(jq -r .header.alg jeton.json)"
@@ -121,6 +122,10 @@ curl -sS -f "$INTERNE/.well-known/openid-configuration" | jq -c '{issuer, jwks_u
 
 echo "--- Accès du pod à l'URL publique (information)"
 curl -sS -o /dev/null -w 'HTTP %{http_code} en %{time_total} s\n' --max-time 10 "$PUBLIC/.well-known/openid-configuration" || echo "injoignable"
+
+# Code de sortie du pod non nul s'il y a au moins un écart ; kubectl run le renvoie, et pipefail le propage au script.
+echo "=== Écarts : $ecarts"
+[ "$ecarts" -eq 0 ]
 POD
 # Délai de démarrage porté à 3 min (1 min par défaut) : téléchargement de l'image au premier lancement.
 } | kubectl -n "$NS" run verif-jwt --rm -i --quiet --restart=Never --pod-running-timeout=3m --image="$IMAGE" --overrides="$OVERRIDES"
