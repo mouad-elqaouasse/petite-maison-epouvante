@@ -13,7 +13,7 @@ Périmètre de l'expérience 1 : `docs/cadrage.md` §3, point 1 « Socle K3s ».
 | 2. RAM réelle de chaque composant de la stack | **Fait** (2026-10-28), hors JVM Spring Boot (cert-manager mesuré en partie 3) |
 | 3. Traefik + cert-manager + Let's Encrypt (staging puis production) | **Fait** (2026-10-28) |
 | 4. Keycloak (issuer public / JWKS interne) | **Fait** (2026-10-28) |
-| 5. HPA (1 → 3 replicas sous charge, RAM consommée) et application des NetworkPolicies | **En cours** (2026-10-28) |
+| 5. HPA (1 → 3 replicas sous charge, RAM consommée) et application des NetworkPolicies | **Fait** (2026-10-29) |
 
 Le détail des parties restantes est en fin de journal.
 
@@ -1373,7 +1373,7 @@ Limites :
 - Renouvellement du certificat avec la redirection HTTPS non observé (premier renouvellement le 2026-12-27).
 - Rôles par défaut (`default-roles-epouvante-test`) absents des comptes importés.
 
-### Partie 5 — HPA et NetworkPolicies (en cours)
+### Partie 5 — HPA et NetworkPolicies (faite)
 Les anciennes parties 5 (HPA) et 6 (NetworkPolicies) du plan sont traitées ensemble.
 
 #### Reprise (état au 2026-10-29, 13:46 UTC)
@@ -1805,7 +1805,8 @@ Constats :
   affichent les codes sans les comparer à un attendu.
 
 ### Nettoyage en fin d'expérience
-- Supprimer les deux pods `np-intrus` (namespaces `sandbox` et `default`).
+- Pods `np-intrus` (namespaces `sandbox` et `default`) **supprimés** le 2026-10-29 à 14:03:47 UTC (`kubectl delete -f ~/exp1/97-np-intrus.yaml`) ;
+  6 pods restants dans `sandbox`, 0 redémarrage ; 1 602 Mio disponibles, swap 81 Mio.
 - Namespace `sandbox` **conservé** pour les expériences 2 et 3 (décision du 2026-10-29), donc aussi le `ClusterRole` /
   `ClusterRoleBinding` `sandbox-prometheus` utilisé par sa stack.
 - cert-manager, son `HelmChart` dans `kube-system` et les deux `ClusterIssuer` sont **conservés** pour `app`
@@ -1814,3 +1815,4 @@ Constats :
 ### Rapport final
 Contenu attendu (`docs/cadrage.md` §4, d'après `consignes.md` §1.2.2 — E1) : environnement, étapes pour
 reproduire, difficultés, limites, résultat (adoption / rejet).
+Rédigé : `docs/experimentations/exp1-socle-k3s-rapport.md` (2026-10-29). **Expérience 1 terminée.**
