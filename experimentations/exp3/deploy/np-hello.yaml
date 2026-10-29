@@ -1,0 +1,24 @@
+# Expérience 3 — seule ouverture nécessaire à exp3-hello sous le refus total de sandbox : Traefik → pod, port 8080.
+# Aucune sortie : le pod n'appelle rien. Le téléchargement de l'image est fait par containerd sur le nœud,
+# hors du champ des NetworkPolicies.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: exp3-hello-entree-traefik
+spec:
+  podSelector:
+    matchLabels:
+      app: exp3-hello
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 8080

@@ -1,0 +1,87 @@
+# Expérience 3 — application de test. Le Secret exp3-hello est créé à la main sur le VPS (jamais dans le dépôt) :
+# ce manifest ne cite que son nom et sa clé (docs/cadrage.md §1.4.15).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: exp3-hello
+  labels:
+    app: exp3-hello
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: exp3-hello
+  template:
+    metadata:
+      labels:
+        app: exp3-hello
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: hello
+          # Tag remplacé par kustomize (kustomization.yaml, images).
+          image: ghcr.io/mouad-elqaouasse/petite-maison-epouvante/exp3-hello
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: DEMO_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: exp3-hello
+                  key: DEMO_SECRET
+          resources:
+            requests:
+              cpu: 50m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          startupProbe:
+            httpGet:
+              path: /version
+              port: http
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /version
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /version
+              port: http
+            periodSeconds: 10
+          volumeMounts:
+            # Tomcat écrit dans /tmp ; le reste du système de fichiers est en lecture seule.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: exp3-hello
+spec:
+  selector:
+    app: exp3-hello
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

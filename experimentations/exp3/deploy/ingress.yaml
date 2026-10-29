@@ -1,0 +1,49 @@
+# Expérience 3 — exp3-hello sur epouvante.menuly-app.com, à la place de whoami.
+# L'Ingress whoami-epouvante (exp. 1, partie 3) est supprimé AVANT la première réconciliation de Flux :
+# deux Ingress sur le même Secret TLS se disputeraient le même Certificate.
+# Reprend le Secret epouvante-tls déjà émis (letsencrypt-prod) : aucune réémission attendue.
+# Redirection HTTP → HTTPS et HSTS par Traefik, comme pour auth. (exp. 1, partie 4 ; docs/cadrage.md §1.4.14).
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: exp3-hello-redirect-https
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+# HSTS d'un an, limité à ce sous-domaine : ni includeSubDomains ni preload (choix réversible).
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: exp3-hello-hsts
+spec:
+  headers:
+    stsSeconds: 31536000
+    stsIncludeSubdomains: false
+    stsPreload: false
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: exp3-hello
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.middlewares: sandbox-exp3-hello-redirect-https@kubernetescrd,sandbox-exp3-hello-hsts@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - epouvante.menuly-app.com
+      secretName: epouvante-tls
+  rules:
+    - host: epouvante.menuly-app.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: exp3-hello
+                port:
+                  name: http

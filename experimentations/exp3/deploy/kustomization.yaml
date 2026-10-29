@@ -1,0 +1,12 @@
+# Expérience 3 — manifests surveillés par Flux (Kustomization exp3-hello, chemin ./experimentations/exp3/deploy).
+# Seul newTag change : le workflow exp3-hello le remplace par le SHA du commit testé, puis commite.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: sandbox
+resources:
+  - hello.yaml
+  - ingress.yaml
+  - np-hello.yaml
+images:
+  - name: ghcr.io/mouad-elqaouasse/petite-maison-epouvante/exp3-hello
+    newTag: a-remplacer-par-la-ci
