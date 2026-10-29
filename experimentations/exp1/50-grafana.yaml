@@ -2,6 +2,10 @@
 # Secret attendu, créé à la main sur le VPS (jamais dans le dépôt) :
 #   grafana-secrets : GF_SECURITY_ADMIN_PASSWORD
 # Limite mémoire large : on mesure la consommation réelle avant de fixer les vraies limites.
+# Partie 5 : tableaux de bord provisionnés depuis des fichiers JSON du dépôt (lecture seule dans Grafana).
+# ConfigMap attendu, créé à partir du JSON avant d'appliquer ce fichier :
+#   kubectl -n sandbox create configmap grafana-dashboards --from-file=demo-hpa.json=51-dashboard-demo-hpa.json \
+#     --dry-run=client -o yaml | kubectl apply -f -
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -12,10 +16,28 @@ data:
     apiVersion: 1
     datasources:
       - name: Prometheus
+        # uid fixe : référencé par les tableaux de bord provisionnés.
+        uid: prometheus
         type: prometheus
         access: proxy
         url: http://prometheus.sandbox.svc:9090
         isDefault: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider
+  namespace: sandbox
+data:
+  fichiers.yaml: |
+    apiVersion: 1
+    providers:
+      - name: exp1
+        folder: Expérience 1
+        type: file
+        allowUiUpdates: false
+        options:
+          path: /etc/grafana/dashboards
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -75,12 +97,22 @@ spec:
           volumeMounts:
             - name: datasources
               mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /etc/grafana/dashboards
             - name: data
               mountPath: /var/lib/grafana
       volumes:
         - name: datasources
           configMap:
             name: grafana-datasources
+        - name: dashboard-provider
+          configMap:
+            name: grafana-dashboard-provider
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
         - name: data
           emptyDir: {}
 ---

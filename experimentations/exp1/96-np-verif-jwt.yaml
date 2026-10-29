@@ -1,0 +1,56 @@
+# Expérience 1, partie 5 — NetworkPolicies, étape 7 : pod éphémère verif-jwt (73-verifier-jetons.sh) sous refus total.
+# Préfigure la règle « service → Keycloak (JWKS interne) » des resource servers de app.
+# kubectl run pose le label run=verif-jwt sur le pod.
+# URL publique (information seulement dans 73) : depuis un pod, la connexion à l'IP publique du VPS est traduite vers le pod
+# svclb-traefik (hostPort) avant le filtrage ; les deux destinations sont autorisées, faute de savoir laquelle est vue.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: verif-jwt-sortie
+  namespace: sandbox
+spec:
+  podSelector:
+    matchLabels:
+      run: verif-jwt
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: keycloak
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - ipBlock:
+            cidr: 51.178.39.218/32
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              svccontroller.k3s.cattle.io/svcname: traefik
+      ports:
+        - protocol: TCP
+          port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keycloak-entree-verif-jwt
+  namespace: sandbox
+spec:
+  podSelector:
+    matchLabels:
+      app: keycloak
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              run: verif-jwt
+      ports:
+        - protocol: TCP
+          port: 8080

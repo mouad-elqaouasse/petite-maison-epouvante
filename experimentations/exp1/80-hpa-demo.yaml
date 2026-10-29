@@ -1,0 +1,81 @@
+# Expérience 1, partie 5 — HPA (Horizontal Pod Autoscaler) sur une application de démonstration qui consomme du CPU.
+# Image : exemple de référence de la documentation Kubernetes (« HorizontalPodAutoscaler Walkthrough ») :
+# PHP + Apache, chaque requête calcule une boucle de racines carrées. Seul tag publié : latest (2015, amd64, ~164 Mo),
+# épinglé ici par son empreinte. Tourne en root (Apache sur le port 80) : acceptable en bac à sable seulement.
+# Charge et mesures : 81-mesurer-hpa.sh. Supprimé avant la partie NetworkPolicies.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cpu-demo
+  namespace: sandbox
+  labels:
+    app: cpu-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cpu-demo
+  template:
+    metadata:
+      labels:
+        app: cpu-demo
+    spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: cpu-demo
+          image: registry.k8s.io/hpa-example@sha256:581697a37f0e136db86d6b30392f0db40ce99c8248a7044c770012f4e8491544
+          ports:
+            - name: http
+              containerPort: 80
+          resources:
+            # Le HPA calcule l'utilisation par rapport à la request CPU (200m) : cible 50 % = 100m par replica.
+            requests:
+              cpu: 200m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cpu-demo
+  namespace: sandbox
+spec:
+  selector:
+    app: cpu-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: cpu-demo
+  namespace: sandbox
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: cpu-demo
+  minReplicas: 1
+  # Plafond du POC (CLAUDE.md, contraintes : HPA max 3 replicas).
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
+  # Pas de bloc behavior : fenêtres par défaut (montée immédiate, descente stabilisée sur 300 s),
+  # celles qu'aura l'environnement app.

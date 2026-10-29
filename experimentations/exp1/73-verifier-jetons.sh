@@ -92,7 +92,15 @@ verifier() { # $1 libellé, $2 attendu (VALIDE|REFUSE), $3 jeton, $4 issuer, $5 
 }
 
 echo "--- JWKS par l'adresse interne"
-curl -sS -f -o jwks.json -w 'HTTP %{http_code}\n' "$INTERNE/protocol/openid-connect/certs"
+# Partie 5 : sous refus total, le premier accès d'un pod neuf peut être refusé le temps que ses règles s'appliquent.
+# Nouvel essai chaque seconde, jusqu'à 30 s ; le délai avant le premier succès est affiché.
+jwks_ok=0
+for essai in $(seq 0 30); do
+  curl -sS -f --max-time 2 -o jwks.json "$INTERNE/protocol/openid-connect/certs" 2>/dev/null && { jwks_ok=1; break; }
+  sleep 1
+done
+if [ "$jwks_ok" = 1 ]; then echo "obtenu après $essai s d'attente (essai n° $((essai + 1)))"
+else echo "toujours refusé après 30 s"; fi
 echo "clés : $(jq -c '[.keys[] | {kid, alg, use}]' jwks.json)"
 printf '%s' "$JETON" | step crypto jwt inspect --insecure > jeton.json
 echo "kid du jeton : $(jq -r .header.kid jeton.json) ; alg : $(jq -r .header.alg jeton.json)"

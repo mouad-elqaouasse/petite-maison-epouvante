@@ -1,0 +1,13 @@
+# Expérience 1, partie 5 — NetworkPolicies, étape 1 : tout refusé dans sandbox, en entrée comme en sortie.
+# Les ouvertures suivantes (91 à 96) s'ajoutent à celle-ci : les règles se cumulent, un flux passe si une règle l'autorise.
+# Non concernés : sondes du kubelet (trafic venant du nœud), kubectl exec / port-forward (passent par le kubelet).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: refus-total
+  namespace: sandbox
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress

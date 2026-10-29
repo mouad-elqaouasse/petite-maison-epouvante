@@ -1,0 +1,42 @@
+# Expérience 1, partie 5 — NetworkPolicies, étape 3 : Keycloak → PostgreSQL.
+# Sous refus total, il faut ouvrir les deux côtés : la sortie du client et l'entrée du serveur.
+# Tout autre pod (de sandbox ou d'un autre namespace) reste refusé par PostgreSQL.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keycloak-sortie-postgres
+  namespace: sandbox
+spec:
+  podSelector:
+    matchLabels:
+      app: keycloak
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-entree-keycloak
+  namespace: sandbox
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: keycloak
+      ports:
+        - protocol: TCP
+          port: 5432

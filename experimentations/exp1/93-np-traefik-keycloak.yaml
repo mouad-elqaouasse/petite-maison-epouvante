@@ -1,0 +1,25 @@
+# Expérience 1, partie 5 — NetworkPolicies, étape 4 : Traefik (kube-system) → Keycloak, port HTTP.
+# Seul le port 8080 est ouvert : l'interface de gestion (9000 : santé, métriques) reste fermée à Traefik.
+# Labels du pod Traefik à confirmer sur le cluster avant l'application (installation par défaut de K3s).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keycloak-entree-traefik
+  namespace: sandbox
+spec:
+  podSelector:
+    matchLabels:
+      app: keycloak
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 8080

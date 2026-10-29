@@ -1,0 +1,90 @@
+# Expérience 1, partie 5 — NetworkPolicies, étape 5 : Prometheus → ses cibles (40-prometheus.yaml).
+#   keycloak:9000 (interface de gestion), rabbitmq:15692 (plugin Prometheus), API Kubernetes (cAdvisor par le proxy des nœuds).
+# API Kubernetes : seule l'adresse réelle de l'API K3s, sur l'hôte (51.178.39.218:6443), est autorisée. Mesuré à l'étape B6 :
+#   la règle s'applique après la traduction d'adresse ; une règle vers l'adresse du service kubernetes.default
+#   (10.43.0.1:443) seule bloque l'accès, et elle est inutile en plus de celle-ci (retirée).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-sortie-cibles
+  namespace: sandbox
+spec:
+  podSelector:
+    matchLabels:
+      app: prometheus
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: keycloak
+      ports:
+        - protocol: TCP
+          port: 9000
+    - to:
+        - podSelector:
+            matchLabels:
+              app: rabbitmq
+      ports:
+        - protocol: TCP
+          port: 15692
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-sortie-api-noeud
+  namespace: sandbox
+spec:
+  podSelector:
+    matchLabels:
+      app: prometheus
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 51.178.39.218/32
+      ports:
+        - protocol: TCP
+          port: 6443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keycloak-entree-prometheus
+  namespace: sandbox
+spec:
+  podSelector:
+    matchLabels:
+      app: keycloak
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 9000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rabbitmq-entree-prometheus
+  namespace: sandbox
+spec:
+  podSelector:
+    matchLabels:
+      app: rabbitmq
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 15692
