@@ -1,0 +1,37 @@
+# Expérience 3 — ce que Flux surveille : le dépôt public (HTTPS anonyme, aucun Secret) et le dossier deploy/.
+# Appliqué après 10-flux-composants.yaml (les CRD doivent exister).
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: petite-maison
+  namespace: flux-system
+spec:
+  url: https://github.com/mouad-elqaouasse/petite-maison-epouvante
+  ref:
+    branch: main
+  # Délai de détection d'un nouveau commit : au plus 1 min (pas de webhook, l'API du cluster n'est pas exposée).
+  interval: 1m
+  timeout: 60s
+  # Archive réduite au seul dossier déployé.
+  ignore: |
+    /*
+    !/experimentations/exp3/deploy/
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: exp3-hello
+  namespace: flux-system
+spec:
+  sourceRef:
+    kind: GitRepository
+    name: petite-maison
+  path: ./experimentations/exp3/deploy
+  targetNamespace: sandbox
+  # Ce que Flux a créé et qui disparaît du dépôt est supprimé du cluster.
+  prune: true
+  # Prêt seulement quand le Deployment est disponible (rollout terminé).
+  wait: true
+  timeout: 3m
+  interval: 10m
+  retryInterval: 1m
