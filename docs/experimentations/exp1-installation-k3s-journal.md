@@ -13,8 +13,7 @@ Périmètre de l'expérience 1 : `docs/cadrage.md` §3, point 1 « Socle K3s ».
 | 2. RAM réelle de chaque composant de la stack | **Fait** (2026-10-28), hors JVM Spring Boot (cert-manager mesuré en partie 3) |
 | 3. Traefik + cert-manager + Let's Encrypt (staging puis production) | **Fait** (2026-10-28) |
 | 4. Keycloak (issuer public / JWKS interne) | **Fait** (2026-10-28) |
-| 5. HPA avec metrics-server (1 → 3 replicas sous charge, RAM consommée) | À faire |
-| 6. Application des NetworkPolicies | À faire |
+| 5. HPA (1 → 3 replicas sous charge, RAM consommée) et application des NetworkPolicies | **En cours** (2026-10-28) |
 
 Le détail des parties restantes est en fin de journal.
 
@@ -1374,14 +1373,417 @@ Limites :
 - Renouvellement du certificat avec la redirection HTTPS non observé (premier renouvellement le 2026-12-27).
 - Rôles par défaut (`default-roles-epouvante-test`) absents des comptes importés.
 
-### Partie 5 — HPA avec metrics-server
-- metrics-server est déjà actif (partie 1, `kubectl top` fonctionne).
-- Vérifier le passage de 1 à 3 replicas sous charge et mesurer la RAM consommée.
+### Partie 5 — HPA et NetworkPolicies (en cours)
+Les anciennes parties 5 (HPA) et 6 (NetworkPolicies) du plan sont traitées ensemble.
 
-### Partie 6 — NetworkPolicies
-- Vérifier que les NetworkPolicies sont réellement appliquées (trafic interdit bloqué, trafic autorisé passant).
+#### Reprise (état au 2026-10-29, 13:46 UTC)
+- **Parties A (HPA) et B (NetworkPolicies) terminées** : cpu-demo supprimé ; tableau de bord « Démo HPA » toujours
+  provisionné dans Grafana.
+- **Règles appliquées dans `sandbox`** : 15 règles (fichiers 90 à 96), matrice à 0 écart après redémarrage des pods (B9).
+- **Prochaine étape** : commits de fin de partie B, puis partie C (bilan final de l'expérience 1), puis nettoyage.
+- **Points d'attention** :
+  - Pod `np-intrus` du namespace `default` : à supprimer au nettoyage (hors `sandbox`).
+  - Tunnels : `ssh -t` obligatoire. Scripts longs : `nohup` sur le VPS.
+  - Non commités : `80`, `81`, `90` à `98`, `50-grafana.yaml`, `51-dashboard-demo-hpa.json`, `73-verifier-jetons.sh`
+    (modifié en B8) (commit `chore`), et ce journal (commit `docs`). À valider (fichiers et messages) avant commit.
 
-### À reprendre au déploiement de `app` (constats des parties 3 et 4)
+Objectifs :
+1. HPA (Horizontal Pod Autoscaler) : application de démonstration consommant du CPU, 1 à 3 replicas, charge générée depuis le
+   cluster ; temps de montée, temps de descente, RAM à 3 replicas. Seuil d'arrêt : RAM disponible < 500 Mio.
+2. NetworkPolicies : vérifier que K3s les applique ; refus total dans `sandbox`, puis ouvertures une par une (DNS, Keycloak →
+   PostgreSQL, Traefik → Keycloak, Prometheus → cibles) ; prouver qu'un pod non autorisé ne joint pas PostgreSQL et que
+   Keycloak fonctionne toujours en HTTPS.
+3. Bilan final de l'expérience 1 : adoption ou rejet, budget RAM pour la suite.
+
+#### Méthode et choix (validés avant la première commande)
+
+| Fichier (`experimentations/exp1/`) | Rôle |
+|---|---|
+| `80-hpa-demo.yaml` | `cpu-demo` : image `registry.k8s.io/hpa-example` (exemple de la documentation Kubernetes, épinglée par empreinte), requests 200m / 64Mi, limits 500m / 256Mi ; HPA `autoscaling/v2` 1 → 3, cible 50 % du CPU demandé, fenêtres par défaut (descente stabilisée sur 300 s) |
+| `81-mesurer-hpa.sh` | Pod de charge `busybox:1.37.0` (200m), relevés toutes les 10 s (CSV), charge maintenue 120 s à 3 replicas, suivi de la descente ; arrêt automatique sous 500 Mio disponibles |
+| `90` à `96-np-*.yaml` | Refus total, puis DNS, Keycloak → PostgreSQL, Traefik → Keycloak, Prometheus → cibles (API Kubernetes en deux règles : adresse du service et adresse du nœud), compléments (Grafana → Prometheus, Traefik → whoami et solveur ACME), pod `verif-jwt` |
+| `97-np-intrus.yaml` | Pods `np-intrus` sans autorisation, dans `sandbox` et dans `default` (`postgres:18.6-alpine`, `pg_isready`) |
+| `98-tester-flux.sh` | Matrice de 19 tests comparés à l'attendu de chaque étape : `strict` (nouvelle connexion), `intrus`, `sensible` (dépend de connexions déjà ouvertes, que le suivi de connexions du noyau peut laisser passer après un refus) |
+
+- Application de démonstration non représentative d'une JVM : ce test valide le mécanisme et ses délais, pas la RAM de
+  `troc-service` à 3 replicas.
+- Limite mémoire portée de 128Mi (protocole initial) à 256Mi : plusieurs processus Apache sous charge, un OOM fausserait la mesure.
+- Matrice de référence lancée **avant** toute règle : un test qui échoue déjà sans règle révèle un outil manquant, pas un blocage.
+
+#### Étape 0 — Transfert et contrôles (lecture seule)
+```bash
+scp experimentations/exp1/8[01]-* experimentations/exp1/9[0-8]-* ubuntu@51.178.39.218:~/exp1/
+ssh ubuntu@51.178.39.218 'cd ~/exp1 && sha256sum 8[01]-* 9[0-8]-* && kubectl -n kube-system get deploy metrics-server && kubectl top nodes && kubectl -n sandbox top pods && free -h && (grep -c -E "disable-network-policy" /etc/systemd/system/k3s.service || true) && sudo iptables-save | grep -c -E "KUBE-ROUTER|KUBE-NWPLCY" && kubectl get ns kube-system --show-labels && kubectl -n kube-system get pods -l "app.kubernetes.io/name=traefik" --show-labels && ... && kubectl apply --dry-run=server -f 80-hpa-demo.yaml -f 90-np-refus-total.yaml ... -f 97-np-intrus.yaml'
+```
+Résultat (16:48:42 UTC) :
+
+| Contrôle | Résultat |
+|---|---|
+| Empreintes SHA-256 poste / VPS | identiques (11 fichiers) |
+| metrics-server | `1/1`, `kubectl top` fonctionne |
+| Nœud | 390m CPU (19 %), 2578Mi (67 %) ; `free` : **1,5 Gio disponibles**, swap 74 Mio |
+| `disable-network-policy` dans le service K3s | absent (0) |
+| Lignes `KUBE-ROUTER` / `KUBE-NWPLCY` dans `iptables-save` | 160 : contrôleur de NetworkPolicies intégré (kube-router) actif |
+| Label du namespace `kube-system` | `kubernetes.io/metadata.name=kube-system` |
+| Labels du pod Traefik | `app.kubernetes.io/name=traefik` (et `instance=traefik-kube-system`) |
+| CoreDNS | `k8s-app=kube-dns`, service 53 UDP/TCP → port 53 du pod |
+| Pod `svclb-traefik` | trouvé par `svccontroller.k3s.cattle.io/svcname=traefik` |
+| Outils dans les pods | Prometheus, Grafana, Traefik : `wget`, `nc` (avec `-z`), `timeout` ; Keycloak : `/usr/bin/timeout` |
+| Dry-run côté serveur | 25 objets acceptés |
+
+Constats : labels et outils conformes aux hypothèses des fichiers, aucun ajustement nécessaire.
+
+#### Étape A1 — Déploiement de cpu-demo
+```bash
+ssh ubuntu@51.178.39.218 'kubectl apply -f ~/exp1/80-hpa-demo.yaml && kubectl -n sandbox rollout status deploy/cpu-demo --timeout=180s && sleep 45 && date -u && kubectl -n sandbox get hpa cpu-demo && kubectl -n sandbox top pod -l app=cpu-demo && free -h'
+```
+Résultat (17:06:48 UTC) :
+```
+cpu-demo   Deployment/cpu-demo   cpu: 0%/50%   1   3   1   62s
+cpu-demo-66587c95-t5hh8   1m   24Mi
+Mem:           3.7Gi       2.3Gi       165Mi        46Mi       1.6Gi       1.4Gi
+Swap:          2.0Gi        76Mi       1.9Gi
+```
+Constats : le HPA lit la métrique CPU (`0%/50%`, pas `<unknown>`) ; un replica au repos : **24 Mio**, 1m de CPU.
+RAM disponible : 1,4 Gio.
+
+#### Étape A1 bis — Tableau de bord Grafana « Démo HPA » (demande ajoutée avant A2)
+Fichiers : `51-dashboard-demo-hpa.json` (4 panneaux : pods cpu-demo en valeur et en courbe, CPU par pod avec repères 0,1
+et 0,5 cœur, RAM disponible du nœud avec seuil à 500 Mio ; rafraîchi toutes les 5 s) ; `50-grafana.yaml` modifié
+(`uid: prometheus` sur la source de données, fournisseur de tableaux de bord, montage du ConfigMap `grafana-dashboards`
+généré depuis le JSON). Métriques cAdvisor seules, collecte inchangée à 30 s (décision de ne pas la réduire).
+```bash
+scp 50-grafana.yaml 51-dashboard-demo-hpa.json ubuntu@51.178.39.218:~/exp1/
+ssh ubuntu@51.178.39.218 'cd ~/exp1 && kubectl -n sandbox create configmap grafana-dashboards --from-file=demo-hpa.json=51-dashboard-demo-hpa.json --dry-run=client -o yaml | kubectl apply -f - && kubectl apply -f 50-grafana.yaml && kubectl -n sandbox rollout status deploy/grafana --timeout=180s && ... wget .../api/search?query=HPA'
+```
+Résultat (17:07 UTC) :
+- `grafana-dashboards` et `grafana-dashboard-provider` créés, Deployment mis à jour, nouveau pod prêt.
+- Logs du nouveau pod : `inserting datasource from configuration name=Prometheus uid=prometheus`, puis
+  `finished to provision dashboards`, sans erreur. (Les lignes `error ... context canceled` relevées par la commande venaient
+  de l'ancien pod en cours d'arrêt.)
+- API de recherche : tableau de bord `demo-hpa`, « Démo HPA », dans le dossier « Expérience 1 ».
+
+Contrôle des trois requêtes dans Prometheus (17:08 UTC) :
+
+| Requête | Résultat |
+|---|---|
+| Nombre de pods (`count(container_memory_working_set_bytes{…container="cpu-demo"})`) | `1` |
+| CPU par pod (`rate(container_cpu_usage_seconds_total{…}[1m])`) | **vide** |
+| RAM disponible (`machine_memory_bytes - working set de id="/"`) | 1 618 292 736 octets (1,51 Gio) |
+
+Constats :
+- **Problème : la requête CPU ne renvoie rien**, alors que le même filtre fonctionne pour la mémoire. Hypothèse : avec une
+  collecte toutes les 30 s, une fenêtre `[1m]` ne contient pas toujours les 2 points nécessaires à `rate` (horodatages
+  fournis par cAdvisor). Diagnostic à faire.
+- RAM du panneau : 1,51 Gio contre 1,4 Gio pour `free` (`available`) : les deux calculs sont proches à ce moment-là.
+
+Diagnostic (lecture seule) :
+```bash
+ssh ubuntu@51.178.39.218 'for q in "container_cpu_usage_seconds_total{namespace=\"sandbox\",container=\"cpu-demo\"}[3m]" "count_over_time(...[1m])" "count_over_time(...[2m])" "sum by (pod) (rate(...[2m]))"; do kubectl -n sandbox exec deploy/prometheus -- wget -qO- "http://localhost:9090/api/v1/query?query=$q"; done'
+```
+Résultat (≈ 17:09:43 UTC) :
+- Horodatages des points sur 3 min : écarts de **34, 27, 26, 38 et 25 s** (horodatages fournis par cAdvisor, pas ceux de la
+  collecte) ; série bien présente avec les labels `namespace`, `pod`, `container`, `cpu="total"`.
+- Points dans la fenêtre : **2** sur 1 min (le minimum pour `rate`, parfois 1 selon le moment), **4** sur 2 min.
+- `rate(...[2m])` : 0,00017 cœur, valeur attendue au repos.
+
+Constats :
+- **Hypothèse confirmée** : la fenêtre d'1 min est trop courte pour une collecte toutes les 30 s aux horodatages irréguliers.
+  Règle habituelle : fenêtre d'au moins 4 fois l'intervalle de collecte.
+- Correction : fenêtre `[2m]` dans `51-dashboard-demo-hpa.json` (version 2). Conséquence : le CPU affiché réagit avec environ
+  1 min de retard sur la charge ; le HPA, lui, lit metrics-server et n'est pas concerné.
+
+Déploiement de la correction (sans redémarrage de Grafana, qui relit ses fichiers toutes les 10 s) :
+```bash
+scp 51-dashboard-demo-hpa.json ubuntu@51.178.39.218:~/exp1/
+ssh ubuntu@51.178.39.218 'cd ~/exp1 && kubectl -n sandbox create configmap grafana-dashboards --from-file=demo-hpa.json=51-dashboard-demo-hpa.json --dry-run=client -o yaml | kubectl apply -f - && for i in $(seq 1 18); do kubectl -n sandbox exec deploy/grafana -- grep -q "\[2m\]" /etc/grafana/dashboards/demo-hpa.json && break; sleep 10; done; ... /api/dashboards/uid/demo-hpa ...'
+```
+Résultat (17:12:34 UTC) : ConfigMap `configured` ; fichier mis à jour dans le pod après quelques dizaines de secondes (le
+premier `grep`, avant la propagation, a renvoyé le code 1) ; l'API de Grafana renvoie `"version":2` et `[2m]`.
+Constat : la mise à jour d'un ConfigMap monté n'est pas immédiate (synchronisation périodique du kubelet).
+
+**Problème : le tunnel Grafana ne s'ouvre plus.** Un premier tunnel (`ssh -L 3000:localhost:3000 … 'kubectl -n sandbox
+port-forward svc/grafana 3000:3000'`) a fonctionné à 16:58 ; après son arrêt, tous les essais suivants échouent avec
+`Unable to listen on port 3000 … bind: address already in use`. Message de `kubectl`, donc côté VPS (port 3000 du poste libre).
+```bash
+ssh ubuntu@51.178.39.218 'ps -o pid,lstart,args -p 3855487; sudo ss -tlnp | grep ":3000 "; ...'
+```
+Résultat : processus 3855487 lancé à 16:58:35, à l'écoute sur `127.0.0.1:3000` et `[::1]:3000` : le `kubectl port-forward`
+du premier tunnel, resté orphelin (même difficulté qu'en partie 4, étape 7). Il visait en plus l'ancien pod Grafana, remplacé
+à 17:07.
+
+Difficulté : la garde « ne tuer que si la ligne de commande contient `port-forward svc/grafana` » a empêché l'arrêt. `ps`
+n'affiche que `kubectl` : sous K3s, `kubectl` est un lien vers le binaire `k3s`, qui réécrit le nom de son processus et masque
+les arguments. Garde remplacée par le propriétaire du port :
+```bash
+ssh ubuntu@51.178.39.218 'sudo ss -tlnp | grep ":3000 " | grep -q "\"kubectl\",pid=3855487," && kill 3855487; sleep 2; sudo ss -tlnp | grep ":3000 " || echo "port 3000 libre sur le VPS"'
+```
+Résultat : `port 3000 libre sur le VPS`.
+
+Correction pour la suite : tunnel ouvert avec `ssh -t` (terminal attribué à la session) ; à la fermeture (Ctrl+C ou coupure),
+le `kubectl` distant reçoit le signal de fin de session et s'arrête avec elle :
+```bash
+ssh -t -o ExitOnForwardFailure=yes -L 3000:localhost:3000 ubuntu@51.178.39.218 'kubectl -n sandbox port-forward svc/grafana 3000:3000'
+```
+
+#### Étape A2 — Mesure du HPA (tableau de bord « Démo HPA » ouvert pendant le test)
+Lancée depuis le poste, en arrière-plan :
+```bash
+ssh ubuntu@51.178.39.218 'bash ~/exp1/81-mesurer-hpa.sh'
+```
+Relevés (CSV `~/exp1/hpa-20261028T171722Z.csv` sur le VPS ; colonnes : heure, secondes depuis T0, phase, replicas voulus par
+le HPA, replicas du Deployment, replicas prêts, CPU vu par le HPA en % de la request, RAM disponible en Mio) :
+```
+Avant la charge (17:17:22) : cpu-demo 1m / 11Mi ; nœud 526m (26 %), 2339Mi (61 %) ; free : 1,4 Gio disponibles
+T0 (charge active) : 17:17:26
+17:17:27,1,montee,1,1,1,0,1437
+17:17:58,33,montee,1,1,1,0,1375
+17:18:09,43,montee,3,3,3,245,1337
+17:18:30,64,tenue,3,3,3,249,1365
+17:18:41,75,tenue,3,3,3,98,1378
+...                                      (tenue : CPU 80 à 97 %, RAM 1302 à 1378 Mio)
+17:20:16,170,tenue,3,3,3,88,1302
+
+RAM à 3 replicas (17:20:16) :
+cpu-demo-...-9rt48   154m   12Mi
+cpu-demo-...-t5hh8   205m   15Mi
+cpu-demo-...-zrfjm   176m   12Mi
+charge-cpu            15m    0Mi
+grafana              34m   508Mi
+keycloak              5m   546Mi
+vps-c67c8a44   1010m   50%   2465Mi   64%
+Mem:           3.7Gi       2.5Gi       125Mi        51Mi       1.5Gi       1.3Gi
+Swap:          2.0Gi        76Mi       1.9Gi
+
+Horodatage exact des pods (création, prêt) :
+cpu-demo-...-9rt48   17:18:02Z   17:18:04Z
+cpu-demo-...-zrfjm   17:18:02Z   17:18:04Z
+
+Charge arrêtée : 17:20:20
+17:20:30,184,descente,3,3,3,89,1344
+17:20:51,205,descente,3,3,3,0,1344
+...                                      (3 replicas, CPU 0 %, RAM 1277 à 1356 Mio)
+17:24:43,437,descente,3,3,3,0,1339
+client_loop: send disconnect: Connection reset by peer      (code de sortie ssh : 255)
+```
+
+**Problème : coupure de la connexion SSH** 263 s après l'arrêt de la charge, avant la fin de la fenêtre de stabilisation
+(300 s). Le script s'est arrêté avec la session (dernier relevé à 17:24:43) ; le HPA a continué seul.
+
+Récupération de la descente (lecture seule, le lendemain) :
+```bash
+ssh ubuntu@51.178.39.218 'pgrep -af mesurer-hpa || echo "script arrêté"; kubectl -n sandbox get hpa cpu-demo -o "jsonpath={.status.lastScaleTime} actuels={.status.currentReplicas} voulus={.status.desiredReplicas}"; kubectl -n sandbox get pods -l "app in (cpu-demo,charge-cpu)"; tail -n 2 ~/exp1/hpa-*.csv; kubectl -n sandbox get events --field-selector involvedObject.name=cpu-demo; kubectl -n sandbox exec deploy/prometheus -- wget -qO- "http://localhost:9090/api/v1/query_range?query=count(container_memory_working_set_bytes{namespace=\"sandbox\",container=\"cpu-demo\"})&start=1793208000&end=1793208900&step=15"; kubectl -n sandbox exec deploy/grafana -- grep -E "^(anon|file|active_file) " /sys/fs/cgroup/memory.stat; free -h'
+```
+Résultat (2026-10-29, 13:09:26 UTC) :
+```
+script : arrêté (seule la commande de contrôle correspond à pgrep)
+HPA : lastScaleTime 2026-10-28T17:25:33Z, actuels=1, voulus=1
+pods : cpu-demo-66587c95-t5hh8 seul (le pod d'origine), charge-cpu absent
+événements : aucun (durée de conservation dépassée)
+Prometheus, nombre de conteneurs cpu-demo : 3 de 17:20:00 à 17:30:15, puis 1 à partir de 17:30:30 (pas de palier à 2)
+Grafana : anon 210 Mio, file 193 Mio (dont active_file 116 Mio)
+Mem:           3.7Gi       2.3Gi       303Mi        45Mi       1.5Gi       1.5Gi
+```
+
+| Mesure | Valeur |
+|---|---|
+| Première décision du HPA (création des 2 pods) | **T0 + 36 s** (17:18:02), directement de 1 à 3 replicas |
+| 3 replicas prêts | **T0 + 38 s** (17:18:04) |
+| Retour à 1 replica après l'arrêt de la charge | **313 s** (17:20:20 → 17:25:33, `lastScaleTime`), directement de 3 à 1 |
+| RAM d'un replica cpu-demo sous charge | 12 à 15 Mio |
+| CPU du nœud à 3 replicas | 1010m (50 % des 2 vCPU) |
+| RAM disponible (`free`) | 1,4 Gio avant → 1,3 Gio à 3 replicas ; minimum relevé 1277 Mio ; swap stable |
+
+Constats :
+- **Montée rapide** : la décision tombe dès la première lecture de metrics-server qui voit la charge (CPU à 245 % de la
+  request) ; le HPA saute de 1 à 3 replicas (il en aurait voulu ≈ 5, plafond à 3). Les nouveaux pods sont prêts en 2 s
+  (image déjà présente sur le nœud). Avec une JVM, il faudra ajouter le temps de démarrage de Spring Boot.
+- À 3 replicas, le CPU reste au-dessus de la cible (80 à 98 % de la request contre 50 %) : le plafond de 3 limite la montée.
+- **Descente** = fenêtre de stabilisation (300 s) + délai de lecture (≈ 13 s), en une seule étape : comportement par défaut
+  attendu. Aucun palier à 2, ni dans `lastScaleTime` ni dans Prometheus.
+- **Décalage du tableau de bord à la descente** : Prometheus voit encore 3 conteneurs **5 min** après la descente réelle
+  (17:25:33 → 17:30:30). Cause : cAdvisor fournit ses propres horodatages, et Prometheus n'ajoute pas de marqueur
+  d'obsolescence aux séries horodatées par la cible ; une série disparue reste visible pendant la fenêtre de recherche par
+  défaut (5 min). Le panneau « Nombre de pods » est donc juste à la montée, en retard de 5 min à la descente.
+  Pistes pour `app` : `kube_deployment_status_replicas` de kube-state-metrics (déjà prévu, `docs/cadrage.md` §1.4.16), ou
+  l'option `track_timestamps_staleness: true` sur le job cAdvisor.
+- **Grafana à 508 Mio** (`kubectl top`) pendant la démo, contre 288 Mio la veille : mémoire propre inchangée (210 Mio, contre
+  ≈ 208 Mio en partie 2) ; la hausse est du cache de fichiers (193 Mio), récupérable.
+- Limite de la mesure : application PHP de 12 à 15 Mio par replica, sans rapport avec une JVM (≈ 384 Mio prévus par replica
+  de `troc-service`, `docs/cadrage.md` §1.4.18) ; le budget RAM de 3 replicas Spring Boot reste à mesurer avec le vrai service.
+- Difficulté : coupure SSH pendant une mesure longue. À l'avenir, scripts longs lancés avec `nohup` sur le VPS et sortie
+  écrite dans un fichier, lu à la fin.
+
+#### Étape A4 — Suppression de la démonstration
+```bash
+ssh ubuntu@51.178.39.218 'kubectl delete -f ~/exp1/80-hpa-demo.yaml && sleep 20 && date -u && kubectl -n sandbox get pods && sudo ss -tlnp | grep ":3000 " || echo "port 3000 libre"; free -h'
+```
+Résultat (2026-10-29, 13:11:59 UTC) : Deployment, Service et HPA `cpu-demo` supprimés ; 6 pods dans `sandbox` (stack + whoami),
+0 redémarrage ; port 3000 libre sur le VPS (tunnel Grafana fermé, aucun `kubectl` orphelin) ; **1,5 Gio disponibles**,
+swap 85 Mio. Le tableau de bord « Démo HPA » reste provisionné dans Grafana, sans effet sur la suite.
+
+#### Étape B1 — Pods intrus et matrice de référence (aucune NetworkPolicy)
+```bash
+ssh ubuntu@51.178.39.218 'kubectl apply -f ~/exp1/97-np-intrus.yaml && kubectl -n sandbox wait --for=condition=Ready pod/np-intrus --timeout=120s && kubectl -n default wait --for=condition=Ready pod/np-intrus --timeout=120s && bash ~/exp1/98-tester-flux.sh reference; echo "code de sortie : $?"'
+```
+Résultat (13:13:45 UTC) : deux pods `np-intrus` prêts (`sandbox` et `default`) ; **19 écarts sur 19** (tous `BLOQUE`), alors
+que l'état des pods affiché par le même script montre Keycloak prêt.
+
+Analyse :
+- Un test contredit directement par l'état des pods (`keycloak prêt` : `BLOQUE`, colonne `PRET` : `true`) : la cause est le
+  script, pas le réseau.
+- **Cause** : chaque test est lancé par `timeout 20 "$@"`, et tous passent par une fonction du script (`dans`, `http_ok`,
+  `keycloak_pret`, `up_job`). `timeout` ne lance que des programmes : il échoue sans rien exécuter
+  (`failed to run command ... No such file or directory`, code 127), sortie masquée par `>/dev/null 2>&1`. Reproduit sur le poste.
+- Correction de `98-tester-flux.sh` : fonctions et variable `NS` exportées (`export -f`), test lancé par
+  `timeout 20 bash -c '"$@"' _ "$@"` ; vérifié sur le poste (fonction exécutée, code 0).
+- Constat : la matrice de référence a joué son rôle (un test qui échoue sans aucune règle révèle un défaut de l'outil).
+
+Nouvelle matrice de référence avec le script corrigé :
+```bash
+scp 98-tester-flux.sh ubuntu@51.178.39.218:~/exp1/
+ssh ubuntu@51.178.39.218 'sha256sum ~/exp1/98-tester-flux.sh && bash ~/exp1/98-tester-flux.sh reference; echo "code de sortie : $?"'
+```
+Résultat (13:15:42 UTC) : empreinte identique (`04e48ff1…756c`) ; **19 `[OK]`, 0 écart**, code de sortie 0. Tous les flux
+passent sans règle, y compris les intrus vers PostgreSQL (par nom et par IP, depuis `sandbox` et `default`) et vers Keycloak.
+Tous les pods prêts, 0 redémarrage. Chaque test sait donc réussir : un blocage observé ensuite viendra des règles.
+
+#### Étape B2 — Refus total (`90-np-refus-total.yaml`)
+```bash
+ssh ubuntu@51.178.39.218 'kubectl apply -f ~/exp1/90-np-refus-total.yaml && sleep 45 && bash ~/exp1/98-tester-flux.sh refus; echo "code de sortie : $?"; kubectl -n sandbox get events --field-selector reason=Unhealthy --sort-by=.lastTimestamp | tail -n 5'
+```
+Résultat (13:20:07 UTC, 45 s après l'application) : **0 écart** ; les 12 tests `strict` et `intrus` sont `BLOQUE`
+(DNS compris) ; les 7 tests `sensible` :
+
+| Test sensible | Obtenu |
+|---|---|
+| Keycloak prêt (sonde, base comprise) | PASSE |
+| HTTPS public `auth.` | BLOQUE |
+| `up{job=keycloak}` | PASSE |
+| `up{job=rabbitmq}` | BLOQUE |
+| `up{job=kubernetes-cadvisor}` | PASSE |
+| HTTPS public `epouvante.` | BLOQUE |
+
+Tous les pods prêts, 0 redémarrage ; aucun événement `Unhealthy`.
+
+Constats :
+- **K3s applique les NetworkPolicies** : toute nouvelle connexion vers ou depuis un pod de `sandbox` est refusée, y compris
+  depuis un autre namespace (`default`) et depuis Traefik (`kube-system`).
+- **Les sondes du kubelet passent** malgré le refus total : kube-router laisse passer le trafic venant du nœud lui-même.
+- **Les connexions déjà établies survivent au refus** (hypothèse du protocole confirmée) : Keycloak reste prêt alors qu'une
+  nouvelle connexion vers PostgreSQL est refusée (sa sonde de disponibilité passe par le pool de connexions ouvert avant la
+  règle) ; Prometheus collecte encore Keycloak et cAdvisor par des connexions gardées ouvertes, mais plus RabbitMQ (connexion
+  refermée entre-temps puis refusée). Traefik et whoami ne répondent plus : leurs connexions ont été rouvertes.
+- Conséquence pour `app` : une règle trop stricte peut passer inaperçue tant que les pods ne redémarrent pas. Après chaque
+  ajout de règle, valider par de nouvelles connexions (matrice) et par un redémarrage des pods concernés.
+
+#### Étape B3 — DNS (`91-np-dns.yaml`)
+```bash
+ssh ubuntu@51.178.39.218 'kubectl apply -f ~/exp1/91-np-dns.yaml && sleep 10 && bash ~/exp1/98-tester-flux.sh dns; echo "code de sortie : $?"'
+```
+Résultat (13:22:38 UTC) : **0 écart**. Seul le DNS de l'intrus passe ; tous les autres tests `strict` et `intrus` restent
+`BLOQUE` ; tests `sensible` identiques à B2. Pods prêts, 0 redémarrage ; règles `refus-total` et `sortie-dns`.
+
+Constat : l'intrus résout `postgres.sandbox.svc.cluster.local`, mais sa connexion est refusée, par nom comme par IP :
+le blocage vient bien de la règle sur PostgreSQL, pas du DNS.
+
+#### Étape B4 — Keycloak → PostgreSQL (`92-np-keycloak-postgres.yaml`)
+```bash
+ssh ubuntu@51.178.39.218 'kubectl apply -f ~/exp1/92-np-keycloak-postgres.yaml && sleep 10 && bash ~/exp1/98-tester-flux.sh keycloak-postgres; echo "code de sortie : $?"'
+```
+Résultat (13:27:02 UTC) : **0 écart** ; règles `keycloak-sortie-postgres` et `postgres-entree-keycloak`. Nouvelle connexion
+Keycloak → PostgreSQL et sonde de Keycloak : `PASSE` ; les 4 tests de l'intrus vers PostgreSQL (`sandbox` et `default`, par
+nom et par IP) : `BLOQUE`. HTTPS `auth.` et `epouvante.` toujours coupés (attendu). Pods prêts, 0 redémarrage.
+(Le script numérote ses propres étapes : « Étape 3 » à l'affichage pour B4, et ainsi de suite.)
+
+#### Étape B5 — Traefik → Keycloak (`93-np-traefik-keycloak.yaml`)
+```bash
+ssh ubuntu@51.178.39.218 'kubectl apply -f ~/exp1/93-np-traefik-keycloak.yaml && sleep 10 && bash ~/exp1/98-tester-flux.sh traefik-keycloak; echo "code de sortie : $?"'
+```
+Résultat (13:28:16 UTC) : **0 écart** ; règle `keycloak-entree-traefik`. Nouvelle connexion Traefik → Keycloak:8080 et HTTPS
+public `auth.` (découverte OIDC) : `PASSE` ; intrus toujours bloqué vers Keycloak et PostgreSQL. Pods prêts, 0 redémarrage.
+
+#### Étape B6 — Prometheus → cibles (`94-np-prometheus-cibles.yaml`)
+```bash
+ssh ubuntu@51.178.39.218 'kubectl apply -f ~/exp1/94-np-prometheus-cibles.yaml && sleep 10 && bash ~/exp1/98-tester-flux.sh prometheus; echo "code de sortie : $?"'
+```
+Résultat (13:30:05 UTC) : **0 écart** ; 5 règles créées (cibles, deux règles API, entrées Keycloak et RabbitMQ). Prometheus
+joint Keycloak:9000, RabbitMQ:15692 et l'API:443 ; `up=1` pour les trois jobs, `rabbitmq` compris (coupé depuis B2).
+Grafana → Prometheus et Traefik → whoami toujours bloqués (attendu jusqu'à B7). Pods prêts, 0 redémarrage.
+
+Test des deux règles API, une par une :
+
+| Règle API conservée | Commande | Heure (UTC) | `prometheus -> API:443` (nouvelle connexion) | Écarts |
+|---|---|---|---|---|
+| Service seul (`10.43.0.1:443`) | `kubectl -n sandbox delete networkpolicy prometheus-sortie-api-noeud`, puis matrice | 13:31:46 | `BLOQUE` | 1 |
+| Nœud seul (`51.178.39.218:6443`) | `kubectl apply -f ~/exp1/94-…` puis `delete networkpolicy prometheus-sortie-api-service`, puis matrice | 13:32:46 | `PASSE` | 0 |
+
+Constats :
+- **La règle de sortie s'applique après la traduction d'adresse** du service `kubernetes.default` : seule l'adresse réelle de
+  l'API K3s (IP du nœud, port 6443) doit être autorisée ; la règle vers l'adresse du service est inutile.
+- Avec le service seul, `up{job=kubernetes-cadvisor}` restait à 1 : connexion de collecte ouverte avant la suppression
+  (même phénomène qu'en B2).
+- Correction de `94-np-prometheus-cibles.yaml` sur le poste (validée) : règle `prometheus-sortie-api-service` retirée, en-tête
+  mis à jour ; fichier recopié sur le VPS avec B7. Le cluster était déjà dans cet état.
+
+#### Étape B7 — Compléments (`95-np-complements.yaml`)
+```bash
+scp experimentations/exp1/94-np-prometheus-cibles.yaml ubuntu@51.178.39.218:~/exp1/ && ssh ubuntu@51.178.39.218 'kubectl apply -f ~/exp1/95-np-complements.yaml && sleep 10 && bash ~/exp1/98-tester-flux.sh complements; echo "code de sortie : $?"'
+```
+Résultat (13:36:32 UTC) : **0 écart** ; 4 règles créées (`grafana-sortie-prometheus`, `prometheus-entree-grafana`,
+`whoami-entree-traefik`, `solveur-acme-entree-traefik`). **19 tests `[OK]`**, plus aucun `[INFO]` : HTTPS public `auth.` et
+`epouvante.` rétablis. 13 règles actives ; pods prêts, 0 redémarrage.
+
+#### Étape B8 — Pod `verif-jwt` sous refus total (`96-np-verif-jwt.yaml` et `73-verifier-jetons.sh`)
+```bash
+ssh ubuntu@51.178.39.218 'kubectl apply -f ~/exp1/96-np-verif-jwt.yaml && sleep 5 && bash ~/exp1/73-verifier-jetons.sh; echo "code de sortie : $?"' && curl -sS -o /dev/null -w 'auth. : %{http_code}\n' https://auth.epouvante.menuly-app.com/realms/epouvante-test/.well-known/openid-configuration && curl -sS -o /dev/null -w 'epouvante. : %{http_code}\n' https://epouvante.menuly-app.com/
+```
+Résultat : règles `verif-jwt-sortie` et `keycloak-entree-verif-jwt` créées ; tests A à E (sur l'hôte, URL publique)
+identiques à la partie 4 ; HTTPS `auth.` et `epouvante.` : 200 depuis le poste. **1 écart** dans le pod :
+
+- Le premier accès aux clés par l'adresse interne (`keycloak.sandbox.svc:8080/.../certs`) est refusé en 10 ms ; `jwks.json`
+  absent, donc `issuer public + clés internes` : `REFUSE` (attendu `VALIDE`). Les 3 autres vérifications sont `[OK]` pour
+  une mauvaise raison (fichier de clés manquant) : faux positifs.
+- Quelques instants plus tard, le même pod lit le document de découverte par la même adresse interne : la règle est correcte.
+- **Hypothèse** : les règles d'un pod neuf sont appliquées par kube-router après son démarrage ; pendant ce délai, seul le
+  refus total s'applique.
+- Le script se termine avec le code 0 malgré l'écart (code de sortie du pod = dernière commande) : à corriger.
+
+Modification de `73-verifier-jetons.sh` (validée) : lecture des clés réessayée chaque seconde, jusqu'à 30 s, avec affichage
+du délai avant le premier succès. Relance :
+```bash
+scp experimentations/exp1/73-verifier-jetons.sh ubuntu@51.178.39.218:~/exp1/ && ssh ubuntu@51.178.39.218 'bash ~/exp1/73-verifier-jetons.sh; echo "code de sortie : $?"; kubectl -n sandbox get pod verif-jwt 2>&1 | tail -n 1'
+```
+Résultat : clés « obtenu après 1 s d'attente (essai n° 2) » ; **4 vérifications `[OK]` pour les bonnes raisons** (jeton
+valide avec issuer public et clés internes ; refus pour issuer interne, audience inconnue, signature invalide) ; tests A à E
+conformes ; pod `verif-jwt` supprimé (`NotFound`).
+
+Constats :
+- **Hypothèse confirmée** : un pod neuf subit le refus total pendant environ 1 s après son démarrage.
+- La règle `service → Keycloak (JWKS interne)` des resource servers de `app` fonctionne sous refus total.
+- Accès du pod à l'URL publique (information) : refusé en 12 ms. La règle vers l'IP publique / `svclb-traefik` ne
+  correspond pas ; sans conséquence, les services utilisent l'adresse interne.
+
+#### Étape B9 — Redémarrage des pods (règles validées sur des connexions neuves)
+```bash
+ssh ubuntu@51.178.39.218 'kubectl -n sandbox rollout restart deploy/keycloak deploy/prometheus && kubectl -n kube-system rollout restart deploy/traefik && kubectl -n sandbox rollout status deploy/keycloak --timeout=5m && kubectl -n sandbox rollout status deploy/prometheus --timeout=3m && kubectl -n kube-system rollout status deploy/traefik --timeout=3m && sleep 60 && bash ~/exp1/98-tester-flux.sh complements; echo "code de sortie : $?"; free -m'
+```
+Résultat (matrice à 13:45:28 UTC) : trois redémarrages terminés, **0 écart**, 19 tests `[OK]`. Nouveaux pods Keycloak et
+Prometheus prêts, 0 redémarrage (aucune boucle) ; 15 règles actives. RAM : **1 562 Mio disponibles**, swap 82 Mio.
+
+Constats :
+- Les règles suffisent sur des connexions neuves : les tests `sensible` ne doivent plus rien aux connexions ouvertes avant B2.
+- Keycloak redémarré joint PostgreSQL malgré le délai d'environ 1 s des pods neufs (B8).
+- RAM au niveau de la partie 4 (1,4 à 1,5 Gio) : coût des NetworkPolicies non mesurable à cette échelle.
+
+#### Bilan de la partie B
+- K3s (kube-router) applique les NetworkPolicies : refus total puis ouvertures une par une, 0 écart final.
+- Un pod non autorisé ne joint pas PostgreSQL (par nom ou par IP, depuis `sandbox` ou `default`) ; Keycloak reste joignable
+  en HTTPS et la vérification des jetons fonctionne sous refus total.
+- Trois pièges mesurés : connexions établies non coupées par une nouvelle règle (B2) ; règle API à écrire sur l'IP du nœud,
+  port 6443 (B6) ; environ 1 s de refus total au démarrage d'un pod neuf (B8).
+
+### À reprendre au déploiement de `app` (constats des parties 3 à 5)
 - Resource servers Spring : `issuer-uri` = URL publique, `jwk-set-uri` = URL interne fixée explicitement (partie 4, étape 8).
 - Keycloak : URL de frontend du realm `master` sur l'adresse du tunnel ; seul le realm applicatif exposé ; administrateur
   permanent à créer à la place de l'administrateur de démarrage ; image optimisée (`start --optimized`) à étudier.
@@ -1391,6 +1793,15 @@ Limites :
 - IP réelle du client perdue par ServiceLB : piste `externalTrafficPolicy: Local` sur le service Traefik, à vérifier
   avant de mettre en place le rate limiting sur `POST /annonces`.
 - Limites de cert-manager : celles de `docs/adr/0001-conserver-cert-manager.md`.
+- Dashboard « Montée en charge » : nombre de replicas lu dans kube-state-metrics, pas compté sur les séries cAdvisor
+  (retard de 5 min à la descente, partie 5, étape A2) ; fenêtres `rate` d'au moins 4 fois l'intervalle de collecte.
+- Tunnels (`kubectl port-forward` par SSH) : toujours avec `ssh -t`, sinon le `kubectl` distant survit à la fermeture.
+- NetworkPolicies (partie 5, partie B) : règle de sortie vers l'API Kubernetes sur l'IP du nœud, port 6443 (pas l'adresse du
+  service) ; après chaque nouvelle règle, valider par de nouvelles connexions et par un redémarrage des pods concernés.
+- Démarrage des services sous refus total : environ 1 s pendant laquelle toute connexion est refusée (partie 5, étape B8).
+  `troc-service` et `notification-service` doivent réessayer leurs premières connexions (PostgreSQL, RabbitMQ, JWKS de Keycloak)
+  au lieu d'échouer.
+- `73-verifier-jetons.sh` : code de sortie 0 même en cas d'écart, à corriger avant de s'en servir comme test.
 
 ### Nettoyage en fin d'expérience
 - Supprimer le namespace `sandbox` (whoami, Ingress, Secrets TLS et toute la stack de la partie 2).
