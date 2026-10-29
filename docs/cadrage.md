@@ -84,6 +84,8 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
       Flux → GitHub/GHCR ;
     - Traefik seul point d'entrée ; console d'administration Keycloak non publique (`kubectl port-forward`) ;
     - en-têtes de sécurité (HSTS, CSP, `X-Content-Type-Options`) ;
+    - redirection HTTP → HTTPS et HSTS portées par des middlewares Traefik sur chaque Ingress de `app` (décision du 29/10/2026) :
+      `sslRequired` de Keycloak est sans effet quand `KC_HOSTNAME` est une URL https (expérience 1, partie 4) ;
     - rate limiting (décision du 28/10/2026) :
       - appliqué **uniquement à `POST /annonces`** ;
       - mis en place **après la correction de l'IP client** (`externalTrafficPolicy: Local` sur le service Traefik) : sans elle,
@@ -98,29 +100,39 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
     - métriques : Micrometer (`/actuator/prometheus`, non exposé par l'Ingress), plugin Prometheus de RabbitMQ, kube-state-metrics ;
     - logs JSON sur stdout, `correlationId` créé à l'entrée et propagé dans l'en-tête de `AnnoncePubliee` ;
     - 2 dashboards Grafana : « Santé » (indicateurs 3 et 4, JVM, files/DLQ) et « Montée en charge » (replicas, CPU, latence, file) ;
-    - 3 alertes : 5xx > 1 %, DLQ > 0, pod en redémarrage en boucle.
+    - 3 alertes : 5xx > 1 %, DLQ > 0, pod en redémarrage en boucle ;
+    - stack légère (décision du 29/10/2026) : Prometheus et Grafana déployés par nos manifests, sans kube-prometheus-stack ;
+      plugins préinstallés de Grafana désactivés ; nombre de replicas lu dans kube-state-metrics, pas compté sur les séries
+      cAdvisor (retard de 5 min à la descente, expérience 1, partie 5).
 17. **Montée en charge et disponibilité** [P3] :
     - JMeter, utilisateurs authentifiés, ~80 % `GET /annonces`, ~20 % `POST /annonces` avec une photo de test ~200 Ko ;
     - pendant les campagnes : `StockagePhoto=jetable` (valide, ne garde rien, renvoie une fausse URL), désactivé par défaut et vérifié par un test ;
       plus une courte campagne avec le vrai Cloudinary pour mesurer la dépendance ;
-    - HPA sur le CPU : `troc-service` 1→3 replicas, `notification-service` 1→2 replicas (budget RAM) ;
+    - HPA sur le CPU : `troc-service` 1→3 replicas, `notification-service` fixé à 1 replica (budget RAM, `docs/adr/0005-budget-ram-et-hpa.md`) ;
+    - paramètres du HPA (décision du 29/10/2026) : `autoscaling/v2`, cible 50 % du CPU demandé, fenêtres de stabilisation par défaut
+      (montée immédiate, descente après 300 s), validés en expérience 1 (montée en 38 s, descente en 313 s) ;
     - démonstration : replicas qui montent/descendent, file RabbitMQ qui se vide, suppression d'un pod sous charge (probes readiness/liveness).
-18. **Budget RAM cible** (à valider en expérience 1) :
+18. **Budget RAM** (révisé le 29/10/2026 d'après l'expérience 1, `docs/experimentations/exp1-socle-k3s-rapport.md` ;
+    décision : `docs/adr/0005-budget-ram-et-hpa.md`). RAM utilisable du VPS : 3 788 Mio.
 
-| Composant | Replicas | Limite / pod | Total max |
-|---|---|---|---|
-| Système + K3s (Traefik, CoreDNS, metrics-server) | — | — | ~600 Mo |
-| Keycloak | 1 | 750 Mo | 750 Mo |
-| PostgreSQL (2 bases) | 1 | 256 Mo | 256 Mo |
-| RabbitMQ | 1 | 256 Mo | 256 Mo |
-| troc-service (`MaxRAMPercentage=75`) | 1–3 | 384 Mo | 1152 Mo |
-| notification-service | 1–2 | 320 Mo | 640 Mo |
-| Front nginx | 1 | 32 Mo | 32 Mo |
-| Prometheus + Grafana + kube-state-metrics | 1 | ~400 Mo | 400 Mo |
-| Flux | — | ~200 Mo | 200 Mo |
-| **Total au pic** | | | **~4,3 Go en limits** (requests plus basses, marge à confirmer) |
+| Composant | Replicas | Request / limit par pod | Mesuré (exp. 1) | Estimé au pic |
+|---|---|---|---|---|
+| Système + K3s (Traefik, CoreDNS, metrics-server) | — | — | ≈ 1 230 Mio | 1 250 Mio |
+| cert-manager (3 pods) | 1 | 96 / 256 Mio cumulés (ADR 0001) | 76 Mio | 80 Mio |
+| Keycloak | 1 | 512 / 768 Mio | 549 à 590 Mio | 600 Mio |
+| PostgreSQL (une instance, une base par service) | 1 | 64 / 256 Mio | 45 Mio | 80 Mio |
+| RabbitMQ | 1 | 128 / 256 Mio | 83 Mio | 120 Mio (à confirmer, exp. 2) |
+| Prometheus | 1 | 64 / 256 Mio | 40 Mio | 100 Mio |
+| Grafana | 1 | 128 / 256 Mio | 208 Mio (mémoire propre) | 220 Mio |
+| kube-state-metrics | 1 | 32 / 64 Mio | — | 30 Mio |
+| Flux | — | — | exp. 3 | 200 Mio |
+| Front nginx | 1 | 16 / 32 Mio | — | 10 Mio |
+| troc-service (`MaxRAMPercentage=75`) | 1–3 | 256 / 384 Mio | — | 3 × 250 = 750 Mio |
+| notification-service | 1 (fixe) | 256 / 320 Mio | — | 250 Mio |
+| **Total au pic** | | | | **≈ 3 690 Mio** (marge ≈ 100 Mio, swap de 2 Go en tampon) |
 
-    Plan B si le budget ne tient pas : réduire la rétention Prometheus, réduire l'empreinte de Keycloak.
+    Plan B : si la marge mesurée pendant les tests de charge est insuffisante (swap qui monte ou pod tué par manque de
+    mémoire, `OOMKilled`), le HPA de `troc-service` passe à 2 replicas maximum.
 19. **Dépôt** : monorepo (`troc-service/`, `notification-service/`, `front/`, `deploy/`, `e2e/`, `load/`, `docs/`) ;
     trunk-based, PR courtes (une par ticket), `main` protégée (tous les contrôles verts), workflows filtrés par chemin,
     Conventional Commits, lien vers le ticket dans chaque PR, images taguées avec le SHA du commit.
@@ -207,7 +219,7 @@ Namespace `sandbox`, supprimé après usage, jamais en même temps que `app` si 
 ## 7. Questions ouvertes
 - Valeur de N pour l'indicateur 3 : à calibrer lors de la première campagne de charge (expérience 1).
 - Mode de suivi des nouvelles images par Flux (image automation ou mise à jour du manifest par la CI) : expérience 3.
-- Budget RAM réel et éventuel plan B : expérience 1.
+- ~~Budget RAM réel et éventuel plan B : expérience 1.~~ Tranché le 29/10/2026 (§1.4.18, `docs/adr/0005-budget-ram-et-hpa.md`).
 
 ## 8. Liste pour le plan de remédiation
 - Photos hébergées hors UE (Cloudinary) — écart assumé pour le POC, à documenter dans un ADR (`contexte.md` §2).
