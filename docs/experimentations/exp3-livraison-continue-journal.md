@@ -87,3 +87,68 @@ Constats :
 - Pas de boucle, deux protections : push du bot avec `GITHUB_TOKEN` (aucun workflow déclenché par GitHub) et filtre de
   chemins sans `deploy/**` ; à vérifier à l'étape 6 (aucun run après le commit du bot).
 - Premier run attendu en échec à la vérification HTTPS : ni Flux ni paquet public à ce moment-là.
+
+### Premier run (push de 4 commits, 15:47 UTC)
+Résultat (run 40905115275, `113f355`) :
+```
+Build et tests 22 s ; image 9 s ; Trivy 32 s (0 critique/haute) ; push GHCR 11 s → étapes réussies jusqu'au push
+Commit du bot f5f118d « chore: déploie exp3-hello 113f355 » (github-actions[bot]), seul kustomization.yaml modifié
+Vérification HTTPS : échec après 10 min (attendu, Flux absent) → run en échec (15:59:26 UTC)
+Runs du dépôt : 1 seul → le commit du bot n'a déclenché aucun workflow (pas de boucle)
+Image téléchargeable sans authentification (manifest 200) : paquet déjà public
+```
+Constats :
+- Paquet GHCR public d'emblée : relié au dépôt public par le label `org.opencontainers.image.source`, il en hérite la
+  visibilité ; aucune action manuelle nécessaire, donc aucun `imagePullSecret`.
+- Chaîne build → push en 1 min 22 s ; la boucle de vérification fixe la durée d'un run en échec (10 min).
+
+## Préparation de Flux (poste)
+Fichiers : `experimentations/exp3/flux/` — `10-flux-composants.yaml` (généré par
+`flux install --export --version=v2.9.6 --components=source-controller,kustomize-controller --network-policy=false`,
+image `ghcr.io/fluxcd/flux-cli:v2.9.6`), `20-np-flux.yaml`, `30-synchro.yaml`, `kustomization.yaml`.
+Constats :
+- Limites par défaut de Flux : 1 Gio et 1 CPU par contrôleur ; ramenées à 256 Mio / 500m par un patch kustomize
+  (`GOMEMLIMIT` suit la limite).
+- 6 NetworkPolicies : refus total, DNS, API K3s (IP du nœud, 6443), source-controller → 443 hors cluster,
+  kustomize-controller ↔ source-controller (9090). Aucune règle vers GHCR (inutile avec ce mode de suivi).
+
+## Étape 0 bis — État initial du VPS (16:02:54 UTC)
+Commande (lecture seule) : `kubectl -n sandbox get pods,ingress,certificate ; kubectl get ns flux-system ; kubectl top … ; free -h`
+Résultat :
+```
+6 pods Running (grafana 298Mi, keycloak 511Mi, postgres 43Mi, prometheus 55Mi, rabbitmq 99Mi, whoami 4Mi)
+Ingress keycloak (auth.) et whoami-epouvante (epouvante.) ; 2 certificats Ready ; pas de namespace flux-system
+nœud : 2015Mi (52 %) ; free : 1,5 Gio disponibles, swap 81 Mio
+```
+
+## Étape 3 — Secret créé à la main
+Commande :
+```bash
+ssh ubuntu@51.178.39.218 'umask 077 && printf "DEMO_SECRET=%s\n" "$(openssl rand -hex 16)" > ~/.env.exp3 && kubectl -n sandbox create secret generic exp3-hello --from-env-file=$HOME/.env.exp3 && rm ~/.env.exp3 && kubectl -n sandbox describe secret exp3-hello'
+```
+Résultat : `secret/exp3-hello created` ; `DEMO_SECRET: 32 bytes`.
+Constats : valeur générée sur le VPS, jamais affichée ni copiée sur le poste ; `.env` supprimé ; le dépôt ne contient
+que le nom `exp3-hello` et la clé `DEMO_SECRET` (`deploy/hello.yaml`).
+
+## Étapes 4 et 5 — Retrait de whoami-epouvante, installation de Flux, première synchronisation
+Commandes :
+```bash
+ssh ubuntu@51.178.39.218 'kubectl -n sandbox delete ingress whoami-epouvante'
+scp -r experimentations/exp3/flux ubuntu@51.178.39.218:~/exp3-flux
+ssh ubuntu@51.178.39.218 'cd ~/exp3-flux && kubectl apply -k . && kubectl -n flux-system rollout status deploy/source-controller deploy/kustomize-controller --timeout=180s && kubectl apply -f 30-synchro.yaml && kubectl -n flux-system wait kustomization/exp3-hello --for=condition=Ready --timeout=300s'
+curl -s https://epouvante.menuly-app.com/version   # puis HTTP, en-têtes et certificat
+```
+Résultat :
+```
+16:03:39 apply -k (namespace, quota, 2 Deployments, 6 NetworkPolicies) → 16:03:52 contrôleurs disponibles (13 s)
+16:03:52 synchro appliquée → 16:04:40 Kustomization Ready (48 s, dont démarrage du pod)
+GitRepository : stored artifact for revision 'main@sha1:f5f118d…' ; Kustomization : Applied revision f5f118d
+Pod exp3-hello 1/1 Running, 0 redémarrage ; Ingress exp3-hello sur epouvante.menuly-app.com
+/version → {"sha":"113f355b14827a89ff112335a9d52f3ef0d4510e","secretPresent":true}
+HTTP → 301 vers https ; HTTPS 200 avec Strict-Transport-Security: max-age=31536000 ; certificat Let's Encrypt (YR1) existant
+```
+Constats :
+- Les NetworkPolicies de `flux-system` suffisent du premier coup : clone GitHub, archive entre contrôleurs, API K3s.
+- Le SHA affiché est celui du commit testé (`113f355`), pas celui du commit du bot (`f5f118d`) : c'est voulu,
+  l'image porte le SHA du code qu'elle contient.
+- Certificat `epouvante-tls` repris sans réémission.
