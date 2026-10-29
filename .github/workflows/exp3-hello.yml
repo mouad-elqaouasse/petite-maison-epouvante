@@ -1,17 +1,14 @@
 # Expérience 3 — chaîne de livraison de l'application de test :
 # build + test → image → scan Trivy → push GHCR (tag = SHA) → tag écrit dans deploy/ → Flux déploie → vérification HTTPS.
 #
-# Pas de boucle, deux protections indépendantes :
+# Expérience terminée (2026-10-29) : lancement manuel seulement. L'application n'est plus déployée (Kustomization
+# supprimée), un run échouerait donc à la vérification HTTPS si Flux n'est pas resynchronisé avant.
+# Pendant l'expérience (déclencheur push sur experimentations/exp3/hello/**), deux protections contre la boucle :
 #   1. le commit du bot est poussé avec GITHUB_TOKEN : GitHub ne déclenche aucun workflow pour ces push ;
-#   2. le filtre de chemins ne contient pas experimentations/exp3/deploy/**, le seul dossier modifié par le bot.
+#   2. le filtre de chemins ne contenait pas experimentations/exp3/deploy/**, le seul dossier modifié par le bot.
 name: exp3-hello
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - experimentations/exp3/hello/**
-      - .github/workflows/exp3-hello.yml
   workflow_dispatch:
 
 # Permissions minimales : écrire le tag dans le dépôt, pousser l'image sur GHCR. Toutes les autres sont à none.
