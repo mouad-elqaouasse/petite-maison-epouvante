@@ -7,4 +7,4 @@ resources:
   - ingress.yaml
 images:
   - name: ghcr.io/mouad-elqaouasse/petite-maison-epouvante/notification-service
-    newTag: "aucune-image"
+    newTag: "b526c34a111332c12f50caf7dc7ecac8aac6c1a8"
