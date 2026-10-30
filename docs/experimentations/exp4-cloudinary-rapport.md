@@ -92,7 +92,7 @@ Une seule mesure par cas (pas de statistique).
 | Limite de 2 Mo | **À porter par `troc-service`** | Cloudinary accepte jusqu'à 10 Mio (3 Mo accepté) |
 | Règle de sortie 443 hors cluster | **Adoptée** | suffisante avec `sortie-dns` ; même limite que Flux |
 
-## 9. Impact sur le cadrage (à valider)
+## 9. Impact sur le cadrage (validé le 2026-10-30, reporté dans `docs/cadrage.md`)
 
 - **§1, point 3 (photo)** : confirmé que la limite de 2 Mo et le contrôle du type (premiers octets) doivent être faits
   par `troc-service` **avant** l'envoi : Cloudinary accepte 3 Mo et des BMP, et ne refuse qu'au-delà de 10 Mio, après transfert.

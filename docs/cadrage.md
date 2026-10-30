@@ -15,6 +15,8 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
    - Upload multipart via `troc-service`, vérification côté serveur, puis envoi à Cloudinary derrière l'interface `StockagePhoto`.
    - L'annonce stocke `photoPublicId` et `photoUrl`. Si l'enregistrement en base échoue, la photo est supprimée (pas d'orphelin).
    - Upload réservé à l'auteur connecté. La photo est envoyée telle quelle (pas de réencodage ni de suppression EXIF en V1).
+   - Taille et type contrôlés par `troc-service` **avant** l'envoi : Cloudinary accepte 3 Mo et le BMP, et ne refuse qu'au-delà
+     de 10 Mio, après le transfert complet (décision du 30/10/2026, `docs/experimentations/exp4-cloudinary-rapport.md`).
 4. **Notification in-app uniquement** : stockée en base, lue via `GET /notifications`, marquage « lue ».
    Deux types : `CONFIRMATION` (« Votre annonce est publiée », pour l'auteur) et `ALERTE` (« Nouvelle annonce », pour les abonnés
    à la catégorie). Un auteur abonné à la catégorie reçoit seulement la confirmation.
@@ -55,12 +57,16 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
 | 5 | Sécurité (bonus) | Vulnérabilités critiques/hautes | 0 (bloquant) | Trivy, CI |
 
    Les indicateurs 1, 2, 5 empêchent la dette d'entrer dans `main` ; 3 et 4 sont suivis dans le temps pour détecter les dérives.
+   Indicateur 3 : un upload vers le vrai Cloudinary prend ≈ 1,5 s depuis le VPS (expérience 4, mesure unique) ; le seuil
+   de 500 ms vaut pour les campagnes en `StockagePhoto=jetable`, la campagne avec le vrai Cloudinary mesure la dépendance.
 12. **Tests** :
     - unitaires (JUnit 5) ;
     - intégration (Testcontainers : PostgreSQL, RabbitMQ, Keycloak avec realm de test ; WireMock pour l'adaptateur Cloudinary) ;
     - **Cloudinary dans les tests** (décision du 27/10/2026) : tous les tests de l'application (acceptation, intégration, E2E, charge)
       utilisent une fausse implémentation de `StockagePhoto` ; l'adaptateur Cloudinary est testé seul contre une API simulée
-      par WireMock (succès, erreur, timeout) ; **aucun appel au vrai Cloudinary en CI**. Seule exception, hors CI : la courte
+      par WireMock (succès, erreur, timeout) ; **aucun appel au vrai Cloudinary en CI**. Réponses à simuler, relevées à
+      l'expérience 4 : 401 « Invalid Signature », 401 « Invalid api_key », 400 « File size too large » ; timeouts de
+      connexion et de lecture fixés dans l'adaptateur (valeurs à proposer avec US1b). Seule exception, hors CI : la courte
       campagne de charge avec le vrai Cloudinary sur le VPS (point 17) ;
     - **acceptation par l'API = la base** : boîte noire, JUnit 5 + RestAssured + Awaitility, `StockagePhoto` simulé.
       Critères en Gherkin dans `docs/backlog/`, un test JUnit par scénario (même nom), sans Cucumber ;
@@ -86,7 +92,8 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
     - pods non-root, `readOnlyRootFilesystem` (+ `emptyDir` sur `/tmp` pour Spring Boot, image `nginx-unprivileged` pour le front),
       `allowPrivilegeEscalation: false`, `capabilities: drop: ALL` ;
     - NetworkPolicies, ajoutées **en dernier, une par une**, application fonctionnelle : refus par défaut dans `app`, puis Traefik → front/API,
-      services → PostgreSQL/RabbitMQ/Keycloak, DNS (CoreDNS), Prometheus → services, `troc-service` → Internet (Cloudinary),
+      services → PostgreSQL/RabbitMQ/Keycloak, DNS (CoreDNS), Prometheus → services, `troc-service` → Internet (Cloudinary :
+      TCP 443 hors des réseaux des pods et des services, sans filtrage par domaine, expérience 4),
       Flux → GitHub (443 hors cluster) et API K3s dans `flux-system` ; aucune règle vers GHCR : les images sont téléchargées
       par containerd sur le nœud, hors du champ des NetworkPolicies (décision du 29/10/2026, expérience 3) ;
     - Traefik seul point d'entrée ; console d'administration Keycloak non publique (`kubectl port-forward`) ;
@@ -158,7 +165,7 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
 | # | User story | Service | Critères d'acceptation principaux |
 |---|---|---|---|
 | US1a | En tant que membre, je publie une annonce de troc avec sa photo (de bout en bout, `StockagePhoto` en mémoire) | troc | 201 si valide ; 400 si invalide ; **400 sans photo** ; photo > 2 Mo ou format non autorisé → 400 ; 401 sans jeton ; auteur tiré du JWT ; annonce visible dans la liste |
-| US1b | Branchement de Cloudinary derrière `StockagePhoto` | troc | photo stockée, `publicId`/URL enregistrés ; suppression si l'enregistrement échoue ; clé lue depuis le secret |
+| US1b | Branchement de Cloudinary derrière `StockagePhoto` | troc | photo stockée, `publicId`/URL enregistrés (`public_id` renvoyé par Cloudinary) ; suppression si l'enregistrement échoue (`destroy`, `invalidate=true`) ; clé lue depuis le secret ; identifiants refusés (401 de Cloudinary) → 500, message de Cloudinary ni renvoyé ni journalisé |
 | US2 | En tant que membre, je gère mes catégories d'intérêt | notification | ajout/retrait ; catégorie inconnue → 400 |
 | US3 | En tant que membre, je suis notifié d'une nouvelle annonce | notification | auteur → `CONFIRMATION` ; abonné → `ALERTE` ; non-abonné → rien ; auteur abonné → seulement `CONFIRMATION` ; message en double → une seule notification ; message en échec → DLQ après 4 livraisons (Testcontainers, RabbitMQ ≥ 4.3) |
 | US4 | En tant que membre, je consulte mes notifications et les marque comme lues | notification | je ne vois que les miennes ; marquer celle d'un autre → 404 |
