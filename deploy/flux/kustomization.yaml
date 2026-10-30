@@ -1,0 +1,22 @@
+# Installation de Flux v2.9.6 (kubectl apply -k), sans bootstrap : Flux ne se gère pas lui-même
+# et n'a aucun accès en écriture au dépôt. Copié de experimentations/exp3/flux/ (rapport exp. 3).
+# 10-flux-composants.yaml est généré, jamais modifié à la main :
+#   flux install --export --version=v2.9.6 --components=source-controller,kustomize-controller --network-policy=false
+# Les NetworkPolicies livrées par Flux (toute sortie autorisée) sont remplacées par 20-np-flux.yaml.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - 10-flux-composants.yaml
+  - 20-np-flux.yaml
+# Limites ramenées de 1Gi / 1000m à 256Mi / 500m (budget RAM, docs/cadrage.md §1.4.18).
+# GOMEMLIMIT suit limits.memory (resourceFieldRef du manifest généré).
+patches:
+  - target:
+      kind: Deployment
+      name: "(source|kustomize)-controller"
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits
+        value:
+          cpu: 500m
+          memory: 256Mi
