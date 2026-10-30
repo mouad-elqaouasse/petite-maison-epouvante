@@ -1,0 +1,39 @@
+# Ce que Flux surveille : le dépôt public (HTTPS anonyme, aucun Secret) et le dossier deploy/app/.
+# Appliqué à la main après 10-flux-composants.yaml (les CRD doivent exister).
+# Repris de experimentations/exp3/flux/30-synchro.yaml (Kustomization exp3-hello remplacée par app, ticket SQ-00).
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: petite-maison
+  namespace: flux-system
+spec:
+  url: https://github.com/mouad-elqaouasse/petite-maison-epouvante
+  ref:
+    branch: main
+  # Délai de détection d'un nouveau commit : au plus 1 min (pas de webhook, l'API du cluster n'est pas exposée).
+  interval: 1m
+  timeout: 60s
+  # Archive réduite au seul dossier de déploiement.
+  ignore: |
+    /*
+    !/deploy/
+---
+# Pas de targetNamespace : chaque manifest de deploy/app/ porte namespace: app (ADR 0008).
+# Le namespace app et ses Secrets sont créés à la main, hors de Flux (ADR 0008).
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: app
+  namespace: flux-system
+spec:
+  sourceRef:
+    kind: GitRepository
+    name: petite-maison
+  path: ./deploy/app
+  # Ce que Flux a créé et qui disparaît du dépôt est supprimé du cluster.
+  prune: true
+  # Prête seulement quand les ressources appliquées sont disponibles (rollout terminé).
+  wait: true
+  timeout: 3m
+  interval: 10m
+  retryInterval: 1m

@@ -1,0 +1,53 @@
+# cert-manager, installé par le contrôleur Helm intégré à K3s (pas de Helm sur le VPS). Appliqué à la main
+# (kubectl apply), hors de Flux. Copié de experimentations/exp1/60-cert-manager.yaml (ADR 0001).
+# Composant à l'échelle du cluster : namespace cert-manager, hors de app.
+# Version figée : dernière version stable au 2026-10-28 (releases GitHub, publiée le 2026-10-23).
+# Limites mémoire de l'ADR 0001 (Décision 3) ; contrôleur au haut de la fourchette 96Mi-128Mi,
+# à réévaluer après une mesure avec les certificats de app (SQ-01, SQ-06).
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: cert-manager
+  namespace: kube-system
+spec:
+  repo: https://charts.jetstack.io
+  chart: cert-manager
+  version: v1.21.3
+  targetNamespace: cert-manager
+  createNamespace: true
+  valuesContent: |-
+    crds:
+      enabled: true
+      # Les CRD survivent à une désinstallation du chart : pas de suppression en cascade des certificats.
+      keep: true
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+    webhook:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 200m
+          memory: 64Mi
+    cainjector:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 200m
+          memory: 64Mi
+    startupapicheck:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi

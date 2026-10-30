@@ -1,0 +1,32 @@
+# Émetteurs Let's Encrypt (staging puis production), validation HTTP-01 via Traefik. Appliqués à la main, hors de Flux.
+# Copiés de experimentations/exp1/61-cluster-issuers.yaml (ADR 0001).
+# Pas d'e-mail : Let's Encrypt n'envoie plus d'alertes d'expiration, et le dépôt public ne contient aucune donnée personnelle.
+# Les clés privées des comptes ACME sont générées par cert-manager dans des Secrets du namespace cert-manager,
+# jamais dans le dépôt.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-staging-account
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: traefik
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-prod-account
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: traefik
