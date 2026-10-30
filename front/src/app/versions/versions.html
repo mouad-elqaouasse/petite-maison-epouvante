@@ -1,0 +1,30 @@
+<main class="page">
+  <h1 class="maison">La Petite Maison de l’Épouvante</h1>
+
+  <section aria-labelledby="titre-versions">
+    <h2 id="titre-versions">Versions en ligne</h2>
+    <p class="aide">Commit dont est issu chacun des composants déployés.</p>
+
+    <dl class="registre" aria-live="polite" [attr.aria-busy]="enLecture()">
+      @for (composant of composants; track composant.id) {
+        @let version = composant.etat();
+        <div class="entree" [attr.data-composant]="composant.id">
+          <dt>{{ composant.nom }}</dt>
+          <dd>
+            @switch (version.etat) {
+              @case ('lecture') {
+                <span class="attente">Lecture…</span>
+              }
+              @case ('lue') {
+                <code class="sha" [title]="version.sha">{{ court(version.sha) }}</code>
+              }
+              @case ('indisponible') {
+                <span class="indisponible">indisponible <span class="raison">({{ version.raison }})</span></span>
+              }
+            }
+          </dd>
+        </div>
+      }
+    </dl>
+  </section>
+</main>

@@ -1,0 +1,117 @@
+# front : chaîne Node (tests, build, Trivy, image), puis livraison commune (_livraison.yml, ADR 0009).
+# On construit l'image une fois : l'image poussée est celle qui a été scannée, dans le même job (docs/cadrage.md §1.3.12).
+# deploy/** est hors du filtre : le commit du tag ne relance pas ce workflow.
+name: front
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - front/**
+      - .github/workflows/front.yml
+      - .github/workflows/_livraison.yml
+  pull_request:
+    paths:
+      - front/**
+      - .github/workflows/front.yml
+      - .github/workflows/_livraison.yml
+
+# Plafond des permissions ; chaque job en demande moins.
+permissions:
+  contents: write
+  packages: write
+
+# Livraisons du front l'une après l'autre ; sur une PR, un nouveau push annule le run précédent.
+concurrency:
+  group: front-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IMAGE: ghcr.io/mouad-elqaouasse/petite-maison-epouvante/front
+  TRIVY_VERSION: v0.76.1
+
+jobs:
+  construire:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22.22"
+          cache: npm
+          cache-dependency-path: front/package-lock.json
+
+      - name: Dépendances
+        working-directory: front
+        run: npm ci --no-audit --no-fund
+
+      - name: Tests unitaires
+        working-directory: front
+        run: npx ng test --watch=false
+
+      - name: Build
+        working-directory: front
+        run: npx ng build
+
+      - name: Trivy fs, dépendances (bloquant si critique ou haute)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          scan-type: fs
+          scan-ref: front
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Build multi-étapes (front/Dockerfile) : même package-lock.json que les tests ci-dessus ; version.json écrit au build.
+      - name: Construction de l'image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: front
+          build-args: GIT_SHA=${{ github.sha }}
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
+          load: true
+          push: false
+
+      - name: Trivy image (bloquant si critique ou haute)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+
+      - if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push sur GHCR
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          docker push "$IMAGE:$GITHUB_SHA"
+          digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE:$GITHUB_SHA")
+          echo "Image poussée : \`$digest\`" >> "$GITHUB_STEP_SUMMARY"
+
+  livraison:
+    needs: construire
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/_livraison.yml
+    with:
+      composant: front
+      url-version: https://epouvante.menuly-app.com/version.json

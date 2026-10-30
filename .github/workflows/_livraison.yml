@@ -1,0 +1,81 @@
+# Livraison commune à tous les composants (ADR 0009) : tag écrit dans deploy/app/, puis vérification HTTPS.
+# Appelé après la construction et le push de l'image, sur main uniquement (_service-java.yml, front.yml).
+# Pas de boucle : le commit du tag est poussé avec GITHUB_TOKEN (aucun workflow relancé) et deploy/** est hors des filtres.
+name: _livraison
+
+on:
+  workflow_call:
+    inputs:
+      composant:
+        description: "Nom du dossier deploy/app/<composant>"
+        required: true
+        type: string
+      url-version:
+        description: "URL publique qui doit renvoyer le SHA après déploiement"
+        required: true
+        type: string
+
+jobs:
+  # Un groupe par composant, sans annulation (complément de l'ADR 0009, SQ-03) : un job en attente n'est remplacé
+  # que par un job plus récent du même composant. Entre composants, les pushs refusés sont rattrapés par rebase.
+  tag:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    concurrency:
+      group: deploy-tag-${{ inputs.composant }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+
+      # Commit du bot : seul newTag de deploy/app/<composant>/kustomization.yaml change, donc aucun conflit de rebase
+      # avec le tag d'un autre composant ; 5 essais au plus, puis échec visible.
+      - name: Écriture du tag dans deploy/app/
+        env:
+          COMPOSANT: ${{ inputs.composant }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
+          fichier="deploy/app/$COMPOSANT/kustomization.yaml"
+          sed -i -E "s|^(\s*newTag:).*|\1 \"$GITHUB_SHA\"|" "$fichier"
+          git diff --stat
+          git commit -am "chore: déploie $COMPOSANT ${GITHUB_SHA::7}"
+          for essai in $(seq 5); do
+            if git push origin HEAD:main; then
+              echo "Tag écrit dans $fichier : $(date -u +%H:%M:%S) UTC, essai $essai/5" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "::warning::Push refusé (essai $essai/5) : rebase sur main puis nouvel essai"
+            sleep $(( essai * 3 ))
+            git pull --rebase origin main
+          done
+          echo "::error::Tag de $COMPOSANT non poussé après 5 essais" | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+  # Vérification après déploiement (docs/cadrage.md §1.3.12) : boucle bornée, aucun test fonctionnel sur l'URL publique.
+  verifier:
+    needs: tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions: {}
+    steps:
+      - name: Vérification HTTPS du SHA en ligne
+        env:
+          URL_VERSION: ${{ inputs.url-version }}
+        run: |
+          debut=$(date +%s)
+          for _ in $(seq 60); do
+            if curl -fsS --max-time 5 "$URL_VERSION" | grep -q "\"version\":\"$GITHUB_SHA\""; then
+              echo "SHA $GITHUB_SHA en ligne après $(( $(date +%s) - debut )) s" | tee -a "$GITHUB_STEP_SUMMARY"
+              code=$(curl -s -o /dev/null -w '%{http_code}' "http://${URL_VERSION#https://}")
+              echo "HTTP en clair → $code (redirection attendue : 301 ou 308)" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "SHA $GITHUB_SHA absent de $URL_VERSION après 10 min" | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1

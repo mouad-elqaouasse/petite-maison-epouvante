@@ -6,3 +6,4 @@ resources:
   - traefik
   - troc-service
   - notification-service
+  - front

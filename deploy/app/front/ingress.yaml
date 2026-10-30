@@ -1,0 +1,27 @@
+# / sur epouvante.menuly-app.com (ADR 0006) : préfixe le plus court, les Ingress /api/... restent prioritaires.
+# Reprend le Secret epouvante-tls copié à SQ-00 : aucune réémission attendue (ADR 0001).
+# Middlewares communs de deploy/app/traefik : redirection HTTP → HTTPS, en-têtes de sécurité (docs/cadrage.md §1.4.14).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: front
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.middlewares: app-redirect-https@kubernetescrd,app-entetes-securite@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - epouvante.menuly-app.com
+      secretName: epouvante-tls
+  rules:
+    - host: epouvante.menuly-app.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: front
+                port:
+                  name: http

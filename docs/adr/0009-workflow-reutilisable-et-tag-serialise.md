@@ -36,3 +36,33 @@
 - Le front a sa propre chaîne (Node), mais réutilise le même job de tag sérialisé.
 - Si `main` ne peut pas recevoir le commit du bot une fois protégée, la cible du tag change (ticket SQ-11, option
   « branche `deploy` ») sans changer ce découpage.
+
+## Complément du 30/10/2026 (ticket SQ-03) — un groupe de concurrence par composant
+
+### Contexte
+
+GitHub Actions garde au plus **un job en cours et un job en attente** par groupe de concurrence : un nouveau job en
+attente annule celui qui attendait déjà, même avec `cancel-in-progress: false` (limite relevée en SQ-02). Avec le front,
+troisième composant livré, trois livraisons rapprochées dans le groupe commun `deploy-tag` peuvent annuler un job `tag` :
+le SHA de ce composant n'est alors jamais écrit dans `deploy/`, et sa vérification en ligne ne tourne pas.
+
+### Décision (remplace le point 3)
+
+3. Le job qui écrit le tag appartient à un **groupe de concurrence propre à son composant**
+   (`concurrency: deploy-tag-<composant>`, sans annulation) : au plus un job de tag à la fois par composant.
+   Il pousse dans une **boucle bornée à 5 essais** : `git pull --rebase` puis `git push` ; échec du job après le 5e refus.
+
+### Pourquoi c'est sûr
+
+- **Dans un même composant**, l'annulation d'un job en attente est sans conséquence : le job qui le remplace porte un
+  SHA plus récent du même composant, qui est celui à déployer.
+- **Entre composants**, les jobs de tag peuvent tourner en même temps ; un push refusé (branche en retard) est rattrapé
+  par le rebase. Les commits de tag ne modifient jamais le même fichier (point 4) : le rebase ne peut pas être en conflit.
+- La boucle est bornée : un refus persistant fait échouer le job, visible dans l'onglet Actions, au lieu de boucler.
+
+### Alternative écartée
+
+| Alternative | Raison |
+|---|---|
+| Garder le groupe commun `deploy-tag` | un job de tag d'un autre composant peut être annulé en attente : SHA jamais déployé |
+| Boucle de réessai sans aucun groupe | deux jobs du même composant pourraient écrire leurs SHA dans le désordre (l'ancien après le nouveau) |

@@ -9,11 +9,13 @@ on:
       - troc-service/**
       - .github/workflows/troc-service.yml
       - .github/workflows/_service-java.yml
+      - .github/workflows/_livraison.yml
   pull_request:
     paths:
       - troc-service/**
       - .github/workflows/troc-service.yml
       - .github/workflows/_service-java.yml
+      - .github/workflows/_livraison.yml
 
 # Plafond des permissions ; chaque job du workflow réutilisable en demande moins.
 permissions:
