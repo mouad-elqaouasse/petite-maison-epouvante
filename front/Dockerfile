@@ -14,6 +14,10 @@ FROM nginxinc/nginx-unprivileged:1.30.6-alpine3.24
 ARG GIT_SHA=inconnu
 LABEL org.opencontainers.image.source="https://github.com/mouad-elqaouasse/petite-maison-epouvante" \
       org.opencontainers.image.revision="${GIT_SHA}"
+# Correctifs Alpine publiés après l'image de base (Trivy, SQ-03) ; curl inutilisé, retiré avec libcurl.
+USER 0
+RUN apk upgrade --no-cache \
+ && apk del --no-cache curl
 COPY nginx/nginx.conf /etc/nginx/nginx.conf
 COPY nginx/entetes-securite.conf /etc/nginx/entetes-securite.conf
 COPY --from=build /src/dist/front/browser /usr/share/nginx/html
