@@ -1,0 +1,130 @@
+/* Polices auto-hébergées : la CSP limite font-src à 'self' (docs/cadrage.md §1.4.14). */
+@import '@fontsource/league-gothic/latin-400.css';
+@import '@fontsource/atkinson-hyperlegible-next/latin-400.css';
+@import '@fontsource/atkinson-hyperlegible-next/latin-700.css';
+
+/* Direction visuelle validée le 30/10/2026 (SQ-03), « affiche de film d'horreur rétro » : noir, crème, rouge sang,
+   titres condensés. Pas de styles de composant : Angular les injecterait en <style>, bloqué par la CSP. */
+:root {
+  --nuit: #080605;
+  --creme: #f1e3c6;
+  --sang: #e3242c;          /* titres seulement (grand corps) */
+  --sang-texte: #ff5a5f;    /* rouge lisible en petit corps */
+  --texte-secondaire: #b9ad96;
+  --filet: #4a3f33;
+
+  --police-titre: 'League Gothic', 'Arial Narrow', sans-serif;
+  --police-texte: 'Atkinson Hyperlegible Next', system-ui, sans-serif;
+}
+
+html {
+  background: var(--nuit);
+  color: var(--creme);
+  font-family: var(--police-texte);
+  line-height: 1.5;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  /* Halo rouge en haut de l'affiche, comme l'éclairage d'un titre de cinéma. */
+  background: radial-gradient(ellipse 70% 45% at 50% 0%, #3b0b0d 0%, transparent 70%);
+}
+
+:focus-visible {
+  outline: 3px solid var(--creme);
+  outline-offset: 2px;
+}
+
+/* Composition d'affiche : centrée. */
+.page {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 3.5rem 1rem 4rem;
+  text-align: center;
+}
+
+/* L'élément marquant : le titre empilé, très condensé, en rouge sang sur toute la largeur. */
+.maison {
+  margin: 0 0 3rem;
+  font-family: var(--police-titre);
+  font-weight: 400;
+  font-size: clamp(4rem, 15vw, 8.5rem);
+  line-height: 0.94;
+  text-transform: uppercase;
+  color: var(--sang);
+}
+
+.page h2 {
+  margin: 0;
+  font-family: var(--police-titre);
+  font-weight: 400;
+  font-size: 2rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.aide {
+  margin: 0 0 1.5rem;
+  color: var(--texte-secondaire);
+}
+
+/* Bloc du générique en bas d'affiche : rôle en petit, nom en grand. */
+.registre {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.5rem 3rem;
+  margin: 0;
+  padding: 1.5rem 0;
+  border-top: 1px solid var(--filet);
+  border-bottom: 1px solid var(--filet);
+}
+
+.entree {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  min-width: 9rem;
+}
+
+.registre dt {
+  font-size: 0.9375rem;
+  color: var(--texte-secondaire);
+}
+
+.registre dd {
+  margin: 0;
+}
+
+.sha {
+  font-family: var(--police-titre);
+  font-size: 2.75rem;
+  line-height: 1;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--creme);
+}
+
+.attente {
+  font-family: var(--police-titre);
+  font-size: 2.75rem;
+  line-height: 1;
+  color: var(--texte-secondaire);
+}
+
+.indisponible {
+  display: block;
+  font-family: var(--police-titre);
+  font-size: 2.75rem;
+  line-height: 1;
+  text-transform: uppercase;
+  color: var(--sang-texte);
+}
+
+.raison {
+  display: block;
+  font-family: var(--police-texte);
+  font-size: 0.875rem;
+  text-transform: none;
+}
