@@ -60,3 +60,23 @@ Solution à proposer et faire valider (ADR 0009 à compléter) avant de brancher
 - **Pour le plan de remédiation** (`docs/cadrage.md` §8) : épingler l'image de base par digest et confier sa mise à
   jour à Dependabot (ou Renovate) pour retrouver des builds reproductibles ; scan Trivy planifié (quotidien) des images
   déjà déployées, et pas seulement à la construction ; SBOM et signature des images (déjà listés au §8).
+
+## Résultats (30/10/2026) — ticket clos
+
+- **Local** : 6 tests unitaires écrits d'abord (échec : composant absent), puis verts ; Playwright à 375 et 1280 px
+  (succès, erreur 503, chargement) sur l'image nginx réelle : axe-core 0 violation, aucun blocage CSP. Direction
+  visuelle choisie parmi trois variantes (`docs/charte-graphique.md`).
+- **Limite du groupe `deploy-tag`** : un groupe par composant et push en 5 essais au plus (complément de l'ADR 0009).
+- **Trivy** : une faille critique et une haute dans l'image de base, corrigées avant fusion (section ci-dessus).
+- **Livraison** : fusion de la PR #10 (`1073a30`) → les trois workflows lancés à la même seconde (16:49:39 UTC), tous
+  verts. Trois commits de tag écrits l'un après l'autre, chacun au premier essai : `ce62558` notification-service
+  (16:51:15), `205204c` front (16:51:49), `33639e1` troc-service (16:51:57). Les jobs `tag` ne se sont pas
+  chevauchés : ni attente ni rebase observés, comme en SQ-02 (le mécanisme reste non démontré en conditions de course).
+- **En ligne** : les trois SHA (`1073a30`) affichés par la page, à 375 et 1280 px, axe-core 0 violation, aucun blocage
+  CSP ; SHA en ligne 139 s (notification-service), 245 s (front) et 273 s (troc-service) après le début de la
+  vérification. En-têtes de `/` : `Content-Security-Policy` (`'self'`), `X-Content-Type-Options`, `Referrer-Policy`,
+  HSTS ; HTTP → **301** vers HTTPS ; route inconnue → `index.html` (200).
+- **Pod** : 1 replica, `Running`, UID 101, 0 redémarrage ; Kustomization `app` `Ready=True` sur `33639e1`.
+- **RAM (`kubectl top`, ≈ 5 min après le démarrage)** : `front` **3 Mio** (limite 32 Mio, estimation 10 Mio,
+  ADR 0005) ; `notification-service` 141 Mio, `troc-service` 138 Mio ; nœud 2 123 Mio (55 %) ; RAM disponible
+  2 012 Mio (`free -m`, contre 1 976 après SQ-02).
