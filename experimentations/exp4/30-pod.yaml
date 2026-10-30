@@ -1,0 +1,50 @@
+# Expérience 4 — pod de test : lance 20-cloudinary.sh une fois puis s'arrête (résultats dans les logs, valeurs masquées).
+# Script et photo montés depuis le ConfigMap exp4-fichiers ; identifiants lus dans le Secret cloudinary-exp4 (créé à la main).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: exp4-cloudinary
+  namespace: sandbox
+  labels:
+    app: exp4-cloudinary
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 100
+    runAsGroup: 101
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: curl
+      image: curlimages/curl:8.11.1
+      command: ["sh", "/photos/20-cloudinary.sh"]
+      envFrom:
+        - secretRef:
+            name: cloudinary-exp4
+      resources:
+        requests:
+          cpu: 50m
+          memory: 32Mi
+        limits:
+          cpu: 500m
+          memory: 64Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+      volumeMounts:
+        - name: fichiers
+          mountPath: /photos
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+  volumes:
+    - name: fichiers
+      configMap:
+        name: exp4-fichiers
+    - name: tmp
+      emptyDir:
+        sizeLimit: 32Mi

@@ -1,0 +1,24 @@
+# Expérience 4 — seule ouverture nécessaire au pod de test sous le refus total de sandbox : sortie HTTPS vers Cloudinary.
+# Une NetworkPolicy ne filtre pas par nom de domaine : tout le 443 hors du cluster est ouvert (même limite que Flux,
+# expérience 3). Réseaux des pods et des services exclus. Le DNS est couvert par sortie-dns (expérience 1).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: exp4-cloudinary-sortie-https
+  namespace: sandbox
+spec:
+  podSelector:
+    matchLabels:
+      app: exp4-cloudinary
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.42.0.0/16
+              - 10.43.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
