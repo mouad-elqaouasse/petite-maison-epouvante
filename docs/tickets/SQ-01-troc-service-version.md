@@ -53,3 +53,24 @@ Le fil le plus court de bout en bout : un commit sur `troc-service/` arrive en l
 - **VPS avant déploiement** : aucun `Certificate` ni `Order` ; RAM disponible 2 299 Mio (`free -m`).
 - **Premier déploiement** : le tag initial `aucune-image` laisse le pod en `ImagePullBackOff` jusqu'au premier commit
   du tag ; le premier run échouera à la vérification tant que le paquet GHCR `troc-service` reste privé (prévu).
+- **Test gitleaks (30/10/2026)** : branche jetable `test-gitleaks`, secret générique factice (`api_secret`, valeur
+  aléatoire, aucun format de fournisseur pour ne rien signaler à un tiers), détecté d'abord en local par la règle
+  `generic-api-key`. gitleaks en échec sur le push et sur la PR #4 (valeur masquée dans les logs) ; PR fermée sans
+  fusion, branche supprimée.
+- **Première livraison (30/10/2026)** : fusion de la PR #3 (`eff0af1`) → run `troc-service` vert en 4 min 24 s
+  (construire, tag, vérifier) ; commit du bot `a33c8eb` ; SHA en ligne **107 s** après le commit du tag.
+  Le paquet GHCR était déjà téléchargeable sans clé : la vérification n'a pas échoué au premier run (contrairement à
+  ce qui était prévu).
+- **Critères vérifiés en ligne** :
+  - `GET https://epouvante.…/api/troc/version` → `{"service":"troc-service","version":"eff0af1…"}` ;
+  - HTTP → redirection vers HTTPS (308 sur `HEAD`, 301 sur `GET`) ; HTTPS : `Strict-Transport-Security: max-age=31536000`
+    et `X-Content-Type-Options: nosniff` ;
+  - `/actuator/health`, `/actuator/prometheus`, `/api/troc/actuator/health` → 404 ;
+  - pod `Running`, UID 65532, **0 redémarrage** ; Kustomization `app` `Ready=True` sur `a33c8eb` ;
+  - certificat réutilisé : `Certificate` `epouvante-tls` créé `Ready=True`, **aucune `CertificateRequest` ni `Order`**,
+    expiration inchangée (26/01/2027) ;
+  - seuls les commits touchant `troc-service/` ont lancé le workflow : ni le commit du bot (`deploy/`), ni la PR #4
+    (fichier à la racine), ni ce commit de documentation.
+- **RAM (`kubectl top`, ≈ 2 min après le démarrage)** : `troc-service` **166 Mio** au repos (limite 384 Mio), première
+  mesure réelle d'une JVM Spring Boot, sous l'estimation de 250 Mio par replica (ADR 0005) ; nœud 1 959 Mio (51 %) ;
+  RAM disponible 2 055 Mio (`free -m`, contre 2 299 avant).
