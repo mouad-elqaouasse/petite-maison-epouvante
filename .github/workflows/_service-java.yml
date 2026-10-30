@@ -1,7 +1,6 @@
 # Chaîne commune des services Java (ADR 0009), appelée par un workflow par composant filtré par chemin :
-# tests → Trivy fs → image → Trivy image → push GHCR (main) → tag écrit dans deploy/app/ → vérification HTTPS.
+# tests → Trivy fs → image → Trivy image → push GHCR (main) → livraison (_livraison.yml : tag dans deploy/app/, vérification HTTPS).
 # On construit une fois : l'image poussée est celle qui a été scannée, dans le même job (docs/cadrage.md §1.3.12).
-# Pas de boucle : le commit du tag est poussé avec GITHUB_TOKEN (aucun workflow relancé) et deploy/** est hors des filtres.
 name: _service-java
 
 on:
@@ -91,57 +90,13 @@ jobs:
           digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE:$GITHUB_SHA")
           echo "Image poussée : \`$digest\`" >> "$GITHUB_STEP_SUMMARY"
 
-  # Un seul job de tag à la fois pour tous les composants, sans annulation (ADR 0009).
-  tag:
+  # Tag et vérification en ligne : chaîne commune à tous les composants (_livraison.yml).
+  livraison:
     needs: construire
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
     permissions:
       contents: write
-    concurrency:
-      group: deploy-tag
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: main
-
-      # Commit du bot : seul newTag de deploy/app/<composant>/kustomization.yaml change.
-      - name: Écriture du tag dans deploy/app/
-        env:
-          COMPOSANT: ${{ inputs.composant }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin main
-          fichier="deploy/app/$COMPOSANT/kustomization.yaml"
-          sed -i -E "s|^(\s*newTag:).*|\1 \"$GITHUB_SHA\"|" "$fichier"
-          git diff --stat
-          git commit -am "chore: déploie $COMPOSANT ${GITHUB_SHA::7}"
-          git push origin HEAD:main
-          echo "Tag écrit dans $fichier : $(date -u +%H:%M:%S) UTC" >> "$GITHUB_STEP_SUMMARY"
-
-  # Vérification après déploiement (docs/cadrage.md §1.3.12) : boucle bornée, aucun test fonctionnel sur l'URL publique.
-  verifier:
-    needs: tag
-    runs-on: ubuntu-24.04
-    timeout-minutes: 12
-    permissions: {}
-    steps:
-      - name: Vérification HTTPS du SHA en ligne
-        env:
-          URL_VERSION: ${{ inputs.url-version }}
-        run: |
-          debut=$(date +%s)
-          for _ in $(seq 60); do
-            if curl -fsS --max-time 5 "$URL_VERSION" | grep -q "\"version\":\"$GITHUB_SHA\""; then
-              echo "SHA $GITHUB_SHA en ligne après $(( $(date +%s) - debut )) s" | tee -a "$GITHUB_STEP_SUMMARY"
-              code=$(curl -s -o /dev/null -w '%{http_code}' "http://${URL_VERSION#https://}")
-              echo "HTTP en clair → $code (redirection attendue : 301 ou 308)" | tee -a "$GITHUB_STEP_SUMMARY"
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "SHA $GITHUB_SHA absent de $URL_VERSION après 10 min" | tee -a "$GITHUB_STEP_SUMMARY"
-          exit 1
+    uses: ./.github/workflows/_livraison.yml
+    with:
+      composant: ${{ inputs.composant }}
+      url-version: ${{ inputs.url-version }}
