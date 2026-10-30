@@ -21,6 +21,14 @@ Une page publique qui montre que les trois composants livrés sont bien ceux du 
 - `front.yml` : filtre `front/**` ; `npm ci`, tests unitaires, build, Trivy fs et image, GHCR, tag, vérification de
   `https://epouvante.…/version.json`. Même logique de tag sérialisé que D4.
 
+## Limite à régler : un seul job en attente dans le groupe `deploy-tag` (relevée en SQ-02)
+
+GitHub Actions garde au plus **un job en cours et un job en attente** par groupe de concurrence ; un nouveau job en
+attente annule celui qui attendait déjà, même avec `cancel-in-progress: false`. Avec deux composants (SQ-02), cela suffit.
+Avec le front comme troisième composant livré, trois livraisons rapprochées peuvent annuler un job `tag` : le SHA de ce
+composant n'est alors jamais écrit dans `deploy/` (et sa vérification en ligne ne tourne pas).
+Solution à proposer et faire valider (ADR 0009 à compléter) avant de brancher `front.yml` sur le job de tag.
+
 ## Critères d'acceptation
 
 - Tests unitaires (écrits d'abord) : affichage des deux versions ; affichage « indisponible » si une API répond en erreur.

@@ -5,3 +5,4 @@ kind: Kustomization
 resources:
   - traefik
   - troc-service
+  - notification-service
