@@ -1,0 +1,6 @@
+# Middlewares Traefik communs, cités par les Ingress sous le nom app-<nom>@kubernetescrd.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: app
+resources:
+  - middlewares.yaml

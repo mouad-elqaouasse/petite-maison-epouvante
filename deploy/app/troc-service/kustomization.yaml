@@ -1,0 +1,10 @@
+# troc-service. Seul newTag change : le workflow troc-service y écrit le SHA du commit testé, puis commite (ADR 0009).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: app
+resources:
+  - troc-service.yaml
+  - ingress.yaml
+images:
+  - name: ghcr.io/mouad-elqaouasse/petite-maison-epouvante/troc-service
+    newTag: "aucune-image"
