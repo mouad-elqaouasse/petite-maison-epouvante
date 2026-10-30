@@ -1,0 +1,33 @@
+# troc-service : chaîne commune des services Java (_service-java.yml, ADR 0009), lancée seulement par ses fichiers.
+# deploy/** est hors du filtre : le commit du tag ne relance pas ce workflow.
+name: troc-service
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - troc-service/**
+      - .github/workflows/troc-service.yml
+      - .github/workflows/_service-java.yml
+  pull_request:
+    paths:
+      - troc-service/**
+      - .github/workflows/troc-service.yml
+      - .github/workflows/_service-java.yml
+
+# Plafond des permissions ; chaque job du workflow réutilisable en demande moins.
+permissions:
+  contents: write
+  packages: write
+
+# Livraisons de troc-service l'une après l'autre ; sur une PR, un nouveau push annule le run précédent.
+concurrency:
+  group: troc-service-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  livrer:
+    uses: ./.github/workflows/_service-java.yml
+    with:
+      composant: troc-service
+      url-version: https://epouvante.menuly-app.com/api/troc/version

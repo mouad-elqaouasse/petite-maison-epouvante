@@ -1,0 +1,147 @@
+# Chaîne commune des services Java (ADR 0009), appelée par un workflow par composant filtré par chemin :
+# tests → Trivy fs → image → Trivy image → push GHCR (main) → tag écrit dans deploy/app/ → vérification HTTPS.
+# On construit une fois : l'image poussée est celle qui a été scannée, dans le même job (docs/cadrage.md §1.3.12).
+# Pas de boucle : le commit du tag est poussé avec GITHUB_TOKEN (aucun workflow relancé) et deploy/** est hors des filtres.
+name: _service-java
+
+on:
+  workflow_call:
+    inputs:
+      composant:
+        description: "Répertoire du service, nom de l'image et du dossier deploy/app/<composant>"
+        required: true
+        type: string
+      url-version:
+        description: "URL publique qui doit renvoyer le SHA après déploiement"
+        required: true
+        type: string
+
+env:
+  IMAGE: ghcr.io/mouad-elqaouasse/petite-maison-epouvante/${{ inputs.composant }}
+  TRIVY_VERSION: v0.76.1
+
+jobs:
+  construire:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+          cache-dependency-path: ${{ inputs.composant }}/pom.xml
+
+      - name: Build et tests
+        working-directory: ${{ inputs.composant }}
+        run: ./mvnw -B verify
+
+      # Dépendances lues dans ~/.m2, rempli par le build : sans appel à Maven Central, qui répond 429 aux IP partagées.
+      - name: Trivy fs, dépendances (bloquant si critique ou haute)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_OFFLINE_SCAN: "true"
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          scan-type: fs
+          scan-ref: ${{ inputs.composant }}
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Construction de l'image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ inputs.composant }}
+          build-args: GIT_SHA=${{ github.sha }}
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
+          load: true
+          push: false
+
+      - name: Trivy image (bloquant si critique ou haute)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+
+      - if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push sur GHCR
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          docker push "$IMAGE:$GITHUB_SHA"
+          digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE:$GITHUB_SHA")
+          echo "Image poussée : \`$digest\`" >> "$GITHUB_STEP_SUMMARY"
+
+  # Un seul job de tag à la fois pour tous les composants, sans annulation (ADR 0009).
+  tag:
+    needs: construire
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    concurrency:
+      group: deploy-tag
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+
+      # Commit du bot : seul newTag de deploy/app/<composant>/kustomization.yaml change.
+      - name: Écriture du tag dans deploy/app/
+        env:
+          COMPOSANT: ${{ inputs.composant }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
+          fichier="deploy/app/$COMPOSANT/kustomization.yaml"
+          sed -i -E "s|^(\s*newTag:).*|\1 \"$GITHUB_SHA\"|" "$fichier"
+          git diff --stat
+          git commit -am "chore: déploie $COMPOSANT ${GITHUB_SHA::7}"
+          git push origin HEAD:main
+          echo "Tag écrit dans $fichier : $(date -u +%H:%M:%S) UTC" >> "$GITHUB_STEP_SUMMARY"
+
+  # Vérification après déploiement (docs/cadrage.md §1.3.12) : boucle bornée, aucun test fonctionnel sur l'URL publique.
+  verifier:
+    needs: tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions: {}
+    steps:
+      - name: Vérification HTTPS du SHA en ligne
+        env:
+          URL_VERSION: ${{ inputs.url-version }}
+        run: |
+          debut=$(date +%s)
+          for _ in $(seq 60); do
+            if curl -fsS --max-time 5 "$URL_VERSION" | grep -q "\"version\":\"$GITHUB_SHA\""; then
+              echo "SHA $GITHUB_SHA en ligne après $(( $(date +%s) - debut )) s" | tee -a "$GITHUB_STEP_SUMMARY"
+              code=$(curl -s -o /dev/null -w '%{http_code}' "http://${URL_VERSION#https://}")
+              echo "HTTP en clair → $code (redirection attendue : 301 ou 308)" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "SHA $GITHUB_SHA absent de $URL_VERSION après 10 min" | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1

@@ -1,6 +1,7 @@
 # Manifests de l'environnement app, surveillés par Flux (Kustomization app, chemin ./deploy/app).
 # Chaque manifest porte namespace: app ; le namespace et les Secrets sont créés à la main (ADR 0008).
-# Vide à SQ-00 : les composants arrivent à partir de SQ-01.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-resources: []
+resources:
+  - traefik
+  - troc-service
