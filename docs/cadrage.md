@@ -74,7 +74,9 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
       deux services, front, Cloudinary remplacé par une fausse implémentation), puis Playwright + axe-core (RGAA). Deux scénarios :
       (1) connexion Keycloak, publication d'une annonce avec photo, annonce visible ; (2) un membre abonné voit la notification ;
     - **après déploiement** : boucle d'attente bornée vérifiant que l'URL publique répond en HTTPS avec le bon SHA.
-      Aucun test ni compte de test sur l'environnement public ;
+      Aucun test automatique sur l'environnement public ; son realm contient seulement des **comptes de démonstration**
+      (`membre-demo`, `abonne-demo`, `moderateur-demo`), mots de passe générés sur le VPS, jamais utilisés par la CI
+      ni par les tests (décision du 30/10/2026, `docs/tickets/README.md`) ;
     - charge : JMeter (voir 1.4 point 17).
     - Règle : on construit une fois, on publie sur GHCR exactement les images testées (même digest), seulement si tout est vert.
 13. **Sécurité du pipeline (DevSecOps)** [Q3, P1] :
