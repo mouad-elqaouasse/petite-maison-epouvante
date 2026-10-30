@@ -1,0 +1,3 @@
+# Seul le jar testé entre dans le contexte de build.
+*
+!target/app.jar
