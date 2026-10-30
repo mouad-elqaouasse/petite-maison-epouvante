@@ -49,6 +49,13 @@ Libérer la RAM du bac à sable sans perdre les certificats, et préparer `app` 
   avec leur label `controller.cert-manager.io/fao` et leurs annotations `cert-manager.io/*` ; dates d'expiration
   inchangées (26/01/2027 13:46:12 et 13:46:10 UTC) ; aucune `CertificateRequest` ni `Order` créée ; fichiers exportés
   effacés du VPS (`shred -u`).
+- **Étape 3 faite (30/10/2026)** : `HelmChart` de cert-manager appliqué avec les limites de l'ADR 0001 (consommation
+  avant : contrôleur 33 Mio, cainjector 20 Mio, webhook 25 Mio) ; `GitRepository` `petite-maison` et Kustomization
+  `app` `Ready=True` sur `main@sha1:fc3dece`.
+- **Étape 4 faite (30/10/2026)** : namespace `sandbox` (volume `postgres-data` compris) et `ClusterRole`/
+  `ClusterRoleBinding` `sandbox-prometheus` supprimés ; Secrets TLS de `app` intacts ; aucune `CertificateRequest`.
+- **Étape 5 (30/10/2026)** : RAM disponible **2 280 Mio** (`free -m`, contre 1 462 avant, soit +818 Mio) ;
+  `kubectl top nodes` : 1 715 Mio (44 %) ; swap 72 Mio.
 
 ## Critères d'acceptation
 
