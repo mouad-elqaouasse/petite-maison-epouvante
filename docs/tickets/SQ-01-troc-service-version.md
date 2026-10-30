@@ -38,3 +38,18 @@ Le fil le plus court de bout en bout : un commit sur `troc-service/` arrive en l
 - Un secret factice dans une PR fait échouer gitleaks (testé sur une branche jetable, non fusionnée).
 - Pod non-root, 0 redémarrage ; RAM mesurée du pod au repos (première mesure réelle d'une JVM Spring Boot, ADR 0005).
 - Le certificat existant est réutilisé (aucune nouvelle `Order`).
+
+## Avancement
+
+- **Local (30/10/2026)** : tests écrits d'abord (3 tests : version, actuator absent de 8080, sondes et métriques
+  sur 8081), en échec (404) puis verts (`mvnw verify`, JDK 25 en conteneur, pas de JDK 25 sur le poste).
+  Image lancée en lecture seule, UID 65532, `--cap-drop ALL`, 384 Mio : démarrage en 2,5 s, **138 Mio au repos**
+  (Docker Desktop, à remesurer sur le VPS). Trivy image et Trivy fs : 0 vulnérabilité critique/haute.
+  gitleaks 8.30.1 sur tout l'historique (48 commits) : aucune fuite. actionlint : aucune erreur.
+  `kubectl apply --dry-run=server` des manifests de `deploy/app/` : accepté.
+- **Trivy fs en CI** : `TRIVY_OFFLINE_SCAN=true`, dépendances lues dans `~/.m2` rempli par le build ; sans cela,
+  Maven Central répond 429 (constaté sur le poste).
+- **Gitleaks** : binaire officiel épinglé (8.30.1) et vérifié par checksum, plutôt que l'action (décision du 30/10/2026).
+- **VPS avant déploiement** : aucun `Certificate` ni `Order` ; RAM disponible 2 299 Mio (`free -m`).
+- **Premier déploiement** : le tag initial `aucune-image` laisse le pod en `ImagePullBackOff` jusqu'au premier commit
+  du tag ; le premier run échouera à la vérification tant que le paquet GHCR `troc-service` reste privé (prévu).
