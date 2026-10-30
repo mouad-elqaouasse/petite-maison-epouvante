@@ -34,3 +34,29 @@ Solution à proposer et faire valider (ADR 0009 à compléter) avant de brancher
 - Tests unitaires (écrits d'abord) : affichage des deux versions ; affichage « indisponible » si une API répond en erreur.
 - En ligne : la page affiche les trois SHA ; l'en-tête CSP est présent ; HTTP redirigé vers HTTPS.
 - Pod non-root ; RAM mesurée (≤ 32 Mio).
+
+## Faille détectée par Trivy dans l'image de base (30/10/2026) — exemple pour le plan de remédiation
+
+- **Détection** : PR #10, job « Trivy image (bloquant si critique ou haute) » du workflow `front` en échec (run
+  `41088284637`). Image construite sur `nginxinc/nginx-unprivileged:1.30.6-alpine3.24` (Alpine 3.24.2), déjà la plus
+  récente : aucun nouveau tag ni digest depuis le 19/10/2026.
+- **Failles** :
+
+| CVE | Gravité | Paquet (installé → corrigé) | Nature |
+|---|---|---|---|
+| CVE-2026-111497 | critique | `brotli-libs` 1.2.0-r1 → 1.2.1-r0 | écriture hors limites dans le décodeur Brotli |
+| CVE-2026-92392 | haute | `curl`, `libcurl` 8.22.0-r0 → 8.23.0-r0 | utilisation après libération (envoi HTTP/2) |
+
+- **Analyse** : correctifs déjà publiés dans le dépôt Alpine 3.24, pas encore dans l'image nginx ; `curl` n'est utilisé
+  ni par nginx ni par les scripts de démarrage (`libcurl` n'est requis que par `curl`) ; `brotli-libs` reste requis
+  par `freetype`. Pas d'exception `.trivyignore` : une correction existait.
+- **Correction** (commit `80b2d3c`, `front/Dockerfile`) : `apk upgrade --no-cache` puis `apk del --no-cache curl`,
+  exécutés en root, l'image repassant ensuite en UID 101. Résultat local : Trivy 0.76.1 à 0 faille critique ou haute,
+  conteneur fonctionnel en lecture seule.
+- **Compromis sur la reproductibilité** : l'image ne dépend plus seulement du tag épinglé, mais aussi du jour du build
+  (paquets Alpine du moment). Deux builds du même commit peuvent différer. Accepté pour le POC : chaque build récupère
+  les correctifs de sécurité sans attendre l'image amont, et Trivy reste bloquant en cas de régression. Alternative
+  écartée : mise à jour ciblée des seuls paquets en cause, plus reproductible mais à refaire à chaque nouvelle CVE.
+- **Pour le plan de remédiation** (`docs/cadrage.md` §8) : épingler l'image de base par digest et confier sa mise à
+  jour à Dependabot (ou Renovate) pour retrouver des builds reproductibles ; scan Trivy planifié (quotidien) des images
+  déjà déployées, et pas seulement à la construction ; SBOM et signature des images (déjà listés au §8).
