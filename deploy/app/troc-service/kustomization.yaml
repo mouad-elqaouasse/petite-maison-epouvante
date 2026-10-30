@@ -7,4 +7,4 @@ resources:
   - ingress.yaml
 images:
   - name: ghcr.io/mouad-elqaouasse/petite-maison-epouvante/troc-service
-    newTag: "9c3f132aa645b147e1da3a5953d81188c1b4dc69"
+    newTag: "1073a30068c74856a3eeb489321ef300f891abab"
