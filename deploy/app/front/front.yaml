@@ -1,0 +1,77 @@
+# front — nginx-unprivileged qui sert l'application Angular (SQ-03), 1 replica.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: front
+  labels:
+    app: front
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: front
+  template:
+    metadata:
+      labels:
+        app: front
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: front
+          # Tag remplacé par kustomize (kustomization.yaml, images).
+          image: ghcr.io/mouad-elqaouasse/petite-maison-epouvante/front
+          ports:
+            - name: http
+              containerPort: 8080
+          # Budget RAM : 16 / 32 Mio (docs/cadrage.md §1.4.18).
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 32Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet:
+              path: /version.json
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /version.json
+              port: http
+            periodSeconds: 10
+          volumeMounts:
+            # PID et fichiers temporaires de nginx (nginx/nginx.conf) ; le reste est en lecture seule.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 8Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: front
+  labels:
+    app: front
+spec:
+  selector:
+    app: front
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
