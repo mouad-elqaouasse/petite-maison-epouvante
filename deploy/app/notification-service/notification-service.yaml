@@ -1,0 +1,91 @@
+# notification-service — 1 replica fixe, sans HPA (ADR 0005, docs/cadrage.md §1.4.17).
+# Ports : 8080 pour l'API (seul port cité par l'Ingress), 8081 pour l'actuator (sondes, métriques ; ADR 0007).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  labels:
+    app: notification-service
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: notification-service
+          # Tag remplacé par kustomize (kustomization.yaml, images).
+          image: ghcr.io/mouad-elqaouasse/petite-maison-epouvante/notification-service
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: gestion
+              containerPort: 8081
+          # Budget RAM : 256 / 320 Mio (docs/cadrage.md §1.4.18) ; JVM à 75 % de la limite (Dockerfile).
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 320Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # Démarrage d'environ 30 s à 500m de CPU (exp. 3) : jusqu'à 90 s tolérées avant redémarrage.
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: gestion
+            periodSeconds: 3
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: gestion
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: gestion
+            periodSeconds: 10
+          volumeMounts:
+            # Tomcat écrit dans /tmp ; le reste du système de fichiers est en lecture seule.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
+---
+# Le port gestion est exposé pour Prometheus (SQ-07) ; l'Ingress ne cite que http.
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  labels:
+    app: notification-service
+spec:
+  selector:
+    app: notification-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+    - name: gestion
+      port: 8081
+      targetPort: gestion
