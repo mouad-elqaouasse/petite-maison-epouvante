@@ -135,6 +135,19 @@ class JetonTest {
         assertThat(moi(jeton).statusCode()).isEqualTo(401);
     }
 
+    // Méthode non prise en charge (405), pas un refus CSRF (403) : la protection CSRF ne gêne pas les appels
+    // authentifiés par jeton Bearer.
+    @Test
+    void post_avec_un_jeton_n_est_pas_bloque_par_la_protection_csrf() throws Exception {
+        HttpRequest requete = HttpRequest.newBuilder(URI.create("http://localhost:" + portApi + "/api/troc/moi"))
+                .header("Authorization", "Bearer " + jeton(HOTE, "client-test", "membre-test"))
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build();
+
+        assertThat(HttpClient.newHttpClient().send(requete, HttpResponse.BodyHandlers.discarding()).statusCode())
+                .isEqualTo(405);
+    }
+
     @Test
     void version_reste_publique() throws Exception {
         HttpRequest requete = HttpRequest.newBuilder(

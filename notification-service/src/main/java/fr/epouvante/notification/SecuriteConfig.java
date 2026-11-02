@@ -38,9 +38,9 @@ class SecuriteConfig {
                         // sans jeton ; sur le port de l'API, tout autre chemin reste un 404.
                         .anyRequest().permitAll())
                 .oauth2ResourceServer(rs -> rs.jwt(jwt -> jwt.jwtAuthenticationConverter(conversion())))
-                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                // Jeton dans l'en-tête Authorization, aucun cookie de session : pas de CSRF possible.
-                .csrf(csrf -> csrf.disable());
+                // Protection CSRF laissée active : le resource server l'ignore déjà pour les requêtes porteuses d'un
+                // jeton Bearer (aucun cookie de session à détourner) et la garde pour toute autre requête.
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
         return http.build();
     }
 
