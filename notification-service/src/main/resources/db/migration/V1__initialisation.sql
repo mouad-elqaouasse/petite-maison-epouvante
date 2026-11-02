@@ -1,0 +1,1 @@
+-- SQ-04 : première migration, sans table. Le schéma arrive avec les user stories (docs/schemas/base-de-donnees.md).
