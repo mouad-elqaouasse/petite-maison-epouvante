@@ -34,13 +34,14 @@ jobs:
           cache: maven
           cache-dependency-path: "*-service/pom.xml"
 
+      # copy-dependencies : jars des dépendances dans target/dependency, lus par l'analyse Java (sonar.java.libraries).
       - name: Tests et couverture, troc-service
         working-directory: troc-service
-        run: ./mvnw -B verify
+        run: ./mvnw -B verify dependency:copy-dependencies
 
       - name: Tests et couverture, notification-service
         working-directory: notification-service
-        run: ./mvnw -B verify
+        run: ./mvnw -B verify dependency:copy-dependencies
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
