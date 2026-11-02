@@ -1,0 +1,83 @@
+{
+  "realm": "test",
+  "enabled": true,
+  "sslRequired": "none",
+  "accessTokenLifespan": 300,
+  "roles": {
+    "realm": [
+      { "name": "USER" },
+      { "name": "MODERATEUR" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "client-test",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "protocolMappers": [
+        {
+          "name": "audience-troc-service",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": { "included.custom.audience": "troc-service", "access.token.claim": "true" }
+        },
+        {
+          "name": "audience-notification-service",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": { "included.custom.audience": "notification-service", "access.token.claim": "true" }
+        }
+      ]
+    },
+    {
+      "clientId": "client-sans-audience",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true
+    },
+    {
+      "clientId": "client-jeton-court",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "attributes": { "access.token.lifespan": "1" },
+      "protocolMappers": [
+        {
+          "name": "audience-troc-service",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": { "included.custom.audience": "troc-service", "access.token.claim": "true" }
+        },
+        {
+          "name": "audience-notification-service",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": { "included.custom.audience": "notification-service", "access.token.claim": "true" }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "membre-test",
+      "enabled": true,
+      "email": "membre-test@example.com",
+      "emailVerified": true,
+      "firstName": "Membre",
+      "lastName": "Test",
+      "realmRoles": ["USER"],
+      "credentials": [{ "type": "password", "value": "membre-test", "temporary": false }]
+    },
+    {
+      "username": "moderateur-test",
+      "enabled": true,
+      "email": "moderateur-test@example.com",
+      "emailVerified": true,
+      "firstName": "Moderateur",
+      "lastName": "Test",
+      "realmRoles": ["USER", "MODERATEUR"],
+      "credentials": [{ "type": "password", "value": "moderateur-test", "temporary": false }]
+    }
+  ]
+}

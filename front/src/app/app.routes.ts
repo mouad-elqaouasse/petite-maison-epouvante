@@ -1,7 +1,7 @@
 import { Routes } from '@angular/router';
-import { Versions } from './versions/versions';
+import { Accueil } from './accueil/accueil';
 
 export const routes: Routes = [
-  { path: '', component: Versions, title: "Versions — La Petite Maison de l’Épouvante" },
+  { path: '', component: Accueil, title: 'La Petite Maison de l’Épouvante' },
   { path: '**', redirectTo: '' },
 ];

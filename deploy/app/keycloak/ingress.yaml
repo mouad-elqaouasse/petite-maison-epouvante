@@ -1,0 +1,37 @@
+# auth.epouvante.menuly-app.com : seul le realm applicatif est routé (ADR 0003 ; guide Keycloak « Using a reverse proxy »).
+#   /realms/epouvante : endpoints OIDC du realm ; /resources : styles et scripts des pages de connexion.
+# Non routés (404 Traefik) : /admin, /realms/master, /health et /metrics (port de gestion, absent de l'Ingress).
+# Reprend le Secret auth-epouvante-tls copié à SQ-00 : aucune réémission attendue (ADR 0001).
+# Redirection HTTP → HTTPS et HSTS par les middlewares communs de deploy/app/traefik : sslRequired de Keycloak est sans
+# effet quand KC_HOSTNAME est une URL https (exp. 1, partie 4, étape 6 ; docs/cadrage.md §1.4.14).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: keycloak
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.middlewares: app-redirect-https@kubernetescrd,app-entetes-securite@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - auth.epouvante.menuly-app.com
+      secretName: auth-epouvante-tls
+  rules:
+    - host: auth.epouvante.menuly-app.com
+      http:
+        paths:
+          - path: /realms/epouvante
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  name: http
+          - path: /resources
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  name: http

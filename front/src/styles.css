@@ -128,3 +128,64 @@ body {
   font-size: 0.875rem;
   text-transform: none;
 }
+
+/* Section « Mon compte » (SQ-06), sous les versions. */
+.compte {
+  margin-top: 3.5rem;
+}
+
+.compte .aide {
+  margin-top: 0.5rem;
+}
+
+.identite {
+  margin: 0.5rem 0 1.5rem;
+}
+
+.identite strong {
+  color: var(--creme);
+}
+
+.erreur {
+  margin: 0.5rem 0 1.5rem;
+  color: var(--sang-texte);
+}
+
+/* Rôles : la valeur en grand du générique, un rôle par ligne. */
+.roles {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--police-titre);
+  font-size: 2.75rem;
+  line-height: 1;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--creme);
+}
+
+/* 19 px en gras : « grand texte » au sens des règles de contraste (seuil 3:1). Crème sur --sang vaut 3,6:1,
+   insuffisant à 16 px (4,5:1 exigé, axe-core). */
+.bouton-principal,
+.bouton-secondaire {
+  min-height: 2.75rem;
+  padding: 0.5rem 1.5rem;
+  border-radius: 2px;
+  font-family: var(--police-texte);
+  font-size: 1.1875rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bouton-principal {
+  border: 1px solid var(--sang);
+  background: var(--sang);
+  color: var(--creme);
+}
+
+.bouton-secondaire {
+  margin-top: 1.5rem;
+  border: 1px solid var(--creme);
+  background: transparent;
+  color: var(--creme);
+}

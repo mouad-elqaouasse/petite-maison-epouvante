@@ -1,0 +1,95 @@
+{
+  "realm": "epouvante",
+  "displayName": "La Petite Maison de l'Épouvante",
+  "enabled": true,
+  "sslRequired": "all",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": false,
+  "resetPasswordAllowed": false,
+  "bruteForceProtected": true,
+  "accessTokenLifespan": 300,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+  "roles": {
+    "realm": [
+      { "name": "USER", "description": "Membre de l'association" },
+      { "name": "MODERATEUR", "description": "Peut retirer une annonce" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "epouvante-front",
+      "name": "Front Angular",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "redirectUris": ["https://epouvante.menuly-app.com/*"],
+      "webOrigins": ["https://epouvante.menuly-app.com"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://epouvante.menuly-app.com/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-troc-service",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "troc-service",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "audience-notification-service",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "notification-service",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "membre-demo",
+      "enabled": true,
+      "email": "membre-demo@example.com",
+      "emailVerified": true,
+      "firstName": "Membre",
+      "lastName": "Démo",
+      "realmRoles": ["USER"],
+      "requiredActions": []
+    },
+    {
+      "username": "abonne-demo",
+      "enabled": true,
+      "email": "abonne-demo@example.com",
+      "emailVerified": true,
+      "firstName": "Abonné",
+      "lastName": "Démo",
+      "realmRoles": ["USER"],
+      "requiredActions": []
+    },
+    {
+      "username": "moderateur-demo",
+      "enabled": true,
+      "email": "moderateur-demo@example.com",
+      "emailVerified": true,
+      "firstName": "Modérateur",
+      "lastName": "Démo",
+      "realmRoles": ["USER", "MODERATEUR"],
+      "requiredActions": []
+    }
+  ]
+}

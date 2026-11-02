@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { toSignal } from '@angular/core/rxjs-interop';
 import { VersionsService } from './versions.service';
 
-/** Page d'accueil du squelette (SQ-03) : SHA des trois composants livrés. */
+/** Section des versions de la page d'accueil (SQ-03) : SHA des trois composants livrés. */
 @Component({
   selector: 'app-versions',
   templateUrl: './versions.html',
