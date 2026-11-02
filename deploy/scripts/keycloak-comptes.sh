@@ -16,8 +16,12 @@ KCADM=/opt/keycloak/bin/kcadm.sh
 CFG=/tmp/kcadm.config
 TUNNEL=http://localhost:8180
 
-kc() { kubectl -n "$NS" exec -i deploy/keycloak -- "$KCADM" "$@" --config "$CFG"; }
-secret() { kubectl -n "$NS" get secret "$1" -o "jsonpath={.data.$2}" | base64 -d; }
+# kc sans entrée standard : lancé par « bash -s », le script arrive lui-même sur l'entrée standard, qu'un
+# kubectl exec -i consommerait. kci (avec -i) seulement quand un tube fournit les données (-f -).
+kc() { kubectl -n "$NS" exec deploy/keycloak -- "$KCADM" "$@" --config "$CFG"; }
+kci() { kubectl -n "$NS" exec -i deploy/keycloak -- "$KCADM" "$@" --config "$CFG"; }
+# Saut de ligne final : sans lui, read renvoie un code d'erreur (fin de fichier) et set -e arrête le script.
+secret() { kubectl -n "$NS" get secret "$1" -o "jsonpath={.data.$2}" | base64 -d; echo; }
 nettoyer() { kubectl -n "$NS" exec deploy/keycloak -- rm -f "$CFG" || true; }
 trap nettoyer EXIT
 
@@ -37,12 +41,12 @@ id_utilisateur() {
 # $1 realm, $2 utilisateur ; mot de passe lu sur l'entrée standard de la fonction.
 definir_mot_de_passe() {
   local id mdp
-  # Lu avant tout appel à kc : kubectl exec -i consommerait l'entrée standard.
+  # Lu en premier : le mot de passe est la seule donnée attendue sur l'entrée standard de la fonction.
   read -r mdp
   id=$(id_utilisateur "$1" "$2")
   [ -n "$id" ] || { echo "ERREUR : utilisateur $2 introuvable dans $1" >&2; exit 1; }
   printf '{"type":"password","value":"%s","temporary":false}' "$mdp" \
-    | kc update "users/$id/reset-password" -r "$1" -n -f -
+    | kci update "users/$id/reset-password" -r "$1" -n -f -
 }
 
 echo "--- Connexion de kcadm (realm master)"
