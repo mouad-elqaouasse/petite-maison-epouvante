@@ -1,0 +1,53 @@
+<section class="compte" aria-labelledby="titre-compte">
+  <h2 id="titre-compte">Mon compte</h2>
+
+  @let etat = session.etat();
+  @switch (etat.etat) {
+    @case ('verification') {
+      <p class="aide" role="status">Vérification de la session…</p>
+    }
+    @case ('deconnecte') {
+      <p class="aide">Connectez-vous pour voir votre nom et vos rôles tels que les reçoit chaque service.</p>
+      <button type="button" class="bouton-principal" (click)="session.connecter()">Se connecter</button>
+    }
+    @case ('erreur') {
+      <p class="erreur" role="alert">Serveur de connexion injoignable : la session n’a pas pu être vérifiée.</p>
+      <button type="button" class="bouton-principal" (click)="session.connecter()">Se connecter</button>
+    }
+    @case ('connecte') {
+      <p class="identite">Connecté en tant que <strong>{{ etat.nom }}</strong></p>
+
+      <dl class="registre" aria-live="polite" [attr.aria-busy]="enLecture()">
+        @for (service of services; track service.id) {
+          @let moi = service.etat();
+          <div class="entree" [attr.data-service]="service.id">
+            <dt>Rôles vus par le {{ service.nom }}</dt>
+            <dd>
+              @switch (moi.etat) {
+                @case ('lecture') {
+                  <span class="attente">Lecture…</span>
+                }
+                @case ('lu') {
+                  @if (moi.roles.length > 0) {
+                    <ul class="roles">
+                      @for (role of moi.roles; track role) {
+                        <li>{{ role }}</li>
+                      }
+                    </ul>
+                  } @else {
+                    <span class="attente">aucun rôle</span>
+                  }
+                }
+                @case ('indisponible') {
+                  <span class="indisponible">indisponible <span class="raison">({{ moi.raison }})</span></span>
+                }
+              }
+            </dd>
+          </div>
+        }
+      </dl>
+
+      <button type="button" class="bouton-secondaire" (click)="session.deconnecter()">Se déconnecter</button>
+    }
+  }
+</section>
