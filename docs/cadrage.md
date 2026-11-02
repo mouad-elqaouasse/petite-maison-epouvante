@@ -51,7 +51,7 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
 | # | Objectif (ISO 25010) | Indicateur | Seuil | Outil / moment |
 |---|---|---|---|---|
 | 1 | Fonctionnalité | % de critères d'acceptation dont le test passe | 100 % (bloquant) | Tests d'acceptation, CI |
-| 2 | Maintenabilité | Quality Gate SonarCloud : couverture du nouveau code, ratio de dette | ≥ 80 %, ≤ 5 %, note A (bloquant) | JaCoCo + SonarCloud, chaque PR |
+| 2 | Maintenabilité | Quality Gate SonarCloud « Sonar way » (offre gratuite, gate par défaut), sur le nouveau code : couverture, ratio de dette, notes, duplication | couverture ≥ 80 %, note A en maintenabilité (dette ≤ 5 %), fiabilité et sécurité, duplication ≤ 3 %, hotspots revus 100 % (bloquant) | JaCoCo + LCOV + SonarCloud, chaque PR (ADR 0012) |
 | 3 | Performance | Latence p95 de `POST /annonces` sous charge | < 500 ms à N utilisateurs | JMeter + Prometheus, campagnes de charge |
 | 4 | Fiabilité | Taux de 5xx + messages en DLQ | < 1 % et 0 | Prometheus / Grafana, alertes |
 | 5 | Sécurité (bonus) | Vulnérabilités critiques/hautes | 0 (bloquant) | Trivy, CI |
