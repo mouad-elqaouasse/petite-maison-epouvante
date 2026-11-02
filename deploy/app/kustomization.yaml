@@ -5,6 +5,7 @@ kind: Kustomization
 resources:
   - traefik
   - postgresql
+  - rabbitmq
   - troc-service
   - notification-service
   - front
