@@ -6,6 +6,7 @@ resources:
   - traefik
   - postgresql
   - rabbitmq
+  - keycloak
   - troc-service
   - notification-service
   - front

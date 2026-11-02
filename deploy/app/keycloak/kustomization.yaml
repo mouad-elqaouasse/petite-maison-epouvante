@@ -1,0 +1,16 @@
+# Keycloak (SQ-06). Secrets keycloak-db (SQ-04) et keycloak-admin créés à la main sur le VPS (ADR 0008).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: app
+resources:
+  - keycloak.yaml
+  - ingress.yaml
+# Realm importé au démarrage s'il est absent (ADR 0014). Un realm déjà présent n'est pas réimporté : une modification
+# du JSON doit être appliquée à la main (kcadm.sh). Pas de suffixe de hachage : redémarrer Keycloak (environ 2 min
+# d'indisponibilité) quand le JSON change ne servirait à rien.
+configMapGenerator:
+  - name: keycloak-realm
+    files:
+      - realm-epouvante.json
+    options:
+      disableNameSuffixHash: true

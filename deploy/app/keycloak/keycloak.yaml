@@ -1,0 +1,137 @@
+# Keycloak 26.8.1 (version de l'exp. 1, épinglée), image officielle standard : `start` construit la configuration à
+# chaque démarrage (image optimisée = bonus SQ-12). Base keycloak de PostgreSQL (SQ-04), mot de passe dans keycloak-db.
+# Issuer public fixe (KC_HOSTNAME), TLS terminé par Traefik, console d'administration par tunnel seulement (ADR 0003).
+# Realm epouvante importé au démarrage s'il est absent (ConfigMap générée depuis realm-epouvante.json, ADR 0014) ;
+# mots de passe des comptes appliqués ensuite par deploy/scripts/keycloak-comptes.sh.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  labels:
+    app: keycloak
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  # Pas de mise à jour progressive : deux Keycloak de 768 Mio ne tiennent pas dans la RAM du VPS (exp. 1).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 0
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.8.1
+          args: ["start", "--import-realm"]
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: gestion
+              containerPort: 9000
+          env:
+            - name: KC_DB
+              value: postgres
+            - name: KC_DB_URL
+              value: jdbc:postgresql://postgresql:5432/keycloak
+            - name: KC_DB_USERNAME
+              value: keycloak
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-db
+                  key: password
+            # Administrateur de démarrage : créé seulement à la création du realm master (premier démarrage),
+            # remplacé par l'administrateur permanent puis supprimé par keycloak-comptes.sh.
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
+              value: admin-demarrage
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-admin
+                  key: bootstrap-password
+            # Issuer public : identique dans les jetons quelle que soit l'adresse utilisée (publique ou interne).
+            - name: KC_HOSTNAME
+              value: https://auth.epouvante.menuly-app.com
+            # Console d'administration par tunnel seulement (non routée par l'Ingress) ; l'URL de frontend du realm
+            # master est aussi réglée sur cette adresse (exp. 1, partie 4, étape 7).
+            - name: KC_HOSTNAME_ADMIN
+              value: http://localhost:8180
+            # TLS terminé par Traefik : HTTP seulement à l'intérieur du cluster.
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_PROXY_HEADERS
+              value: xforwarded
+            # En-têtes X-Forwarded-* acceptés seulement depuis le réseau des pods (Traefik).
+            - name: KC_PROXY_TRUSTED_ADDRESSES
+              value: 10.42.0.0/16
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            - name: KC_METRICS_ENABLED
+              value: "true"
+          # Budget RAM : 512 / 768 Mio (ticket SQ-06, ADR 0005) ; pic de démarrage à la limite en exp. 1, sans OOM.
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          # Démarrage non optimisé : prêt en 1 min 47 à 2 min 36 en exp. 1, plus l'import du realm.
+          # Jusqu'à 5 min tolérées avant redémarrage.
+          startupProbe:
+            httpGet:
+              path: /health/started
+              port: gestion
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: gestion
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: gestion
+            periodSeconds: 20
+          volumeMounts:
+            - name: realm
+              mountPath: /opt/keycloak/data/import
+              readOnly: true
+      volumes:
+        - name: realm
+          configMap:
+            name: keycloak-realm
+---
+# Service interne : les services lisent les clés par http://keycloak:8080 (ADR 0003) ; gestion pour Prometheus (SQ-07).
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  labels:
+    app: keycloak
+spec:
+  selector:
+    app: keycloak
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+    - name: gestion
+      port: 9000
+      targetPort: gestion

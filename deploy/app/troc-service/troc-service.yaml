@@ -54,6 +54,11 @@ spec:
                 secretKeyRef:
                   name: troc-rabbitmq
                   key: password
+            # Jetons Keycloak (SQ-06, ADR 0003) : issuer public ; clés lues par le Service interne, fixées explicitement.
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+              value: https://auth.epouvante.menuly-app.com/realms/epouvante
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
+              value: http://keycloak:8080/realms/epouvante/protocol/openid-connect/certs
           # Budget RAM : 256 / 384 Mio (docs/cadrage.md §1.4.18) ; JVM à 75 % de la limite (Dockerfile).
           resources:
             requests:
