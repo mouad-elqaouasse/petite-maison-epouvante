@@ -44,6 +44,16 @@ spec:
                 secretKeyRef:
                   name: troc-db
                   key: password
+            # Broker avec le compte troc (SQ-05, ADR 0010) ; mot de passe lu dans le Secret troc-rabbitmq.
+            - name: SPRING_RABBITMQ_HOST
+              value: rabbitmq
+            - name: SPRING_RABBITMQ_USERNAME
+              value: troc
+            - name: SPRING_RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: troc-rabbitmq
+                  key: password
           # Budget RAM : 256 / 384 Mio (docs/cadrage.md §1.4.18) ; JVM à 75 % de la limite (Dockerfile).
           resources:
             requests:
@@ -65,7 +75,7 @@ spec:
               port: gestion
             periodSeconds: 3
             failureThreshold: 40
-          # readiness inclut la santé db (ADR 0013) ; délai de 3 s, au-dessus de celui du pool (2 s).
+          # readiness inclut les santés db et rabbit (ADR 0013, SQ-05) ; délai de 3 s, au-dessus de celui du pool (2 s).
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness

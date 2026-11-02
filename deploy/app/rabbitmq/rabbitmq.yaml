@@ -1,0 +1,120 @@
+# RabbitMQ 4.4 (image des exp. 1 et 2), un pod, stockage emptyDir, Service interne seulement (SQ-05).
+# Comptes et topologie chargés au démarrage depuis le Secret rabbitmq-definitions (ADR 0010) : aucun compte guest,
+# aucun compte administrateur ; diagnostic ponctuel par rabbitmqctl dans le pod (cookie Erlang, ADR 0005).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rabbitmq-config
+  labels:
+    app: rabbitmq
+data:
+  # Ajouté après conf.d/10-defaults.conf de l'image (journaux sur la console).
+  20-app.conf: |
+    definitions.import_backend = local_filesystem
+    definitions.local.path = /etc/rabbitmq/definitions/definitions.json
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rabbitmq
+  labels:
+    app: rabbitmq
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+    spec:
+      automountServiceAccountToken: false
+      # UID 100 / GID 101 : utilisateur rabbitmq de l'image alpine ; rabbitmqctl tourne sous le même utilisateur
+      # que le serveur et lit le même cookie Erlang (exp. 1, journal, étapes F et G).
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:4.4.0-management-alpine
+          ports:
+            - name: amqp
+              containerPort: 5672
+            - name: prometheus
+              containerPort: 15692
+          # Budget RAM : 128 / 256 Mio, 130 Mio au pic (ADR 0005 ; 95 Mio au repos en exp. 2).
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # tcpSocket et pas rabbitmq-diagnostics : la sonde CLI lance une seconde VM Erlang (+60 Mio, ADR 0005).
+          readinessProbe:
+            tcpSocket:
+              port: amqp
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: amqp
+            initialDelaySeconds: 60
+            periodSeconds: 20
+          volumeMounts:
+            # Données, cookie Erlang et fichiers temporaires ; le reste du système de fichiers est en lecture seule.
+            # emptyDir : messages perdus si le pod est recréé (limite assumée, ADR 0010).
+            - name: data
+              mountPath: /var/lib/rabbitmq
+            - name: tmp
+              mountPath: /tmp
+            - name: config
+              mountPath: /etc/rabbitmq/conf.d/20-app.conf
+              subPath: 20-app.conf
+              readOnly: true
+            - name: definitions
+              mountPath: /etc/rabbitmq/definitions
+              readOnly: true
+      volumes:
+        - name: data
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
+        - name: config
+          configMap:
+            name: rabbitmq-config
+        - name: definitions
+          secret:
+            secretName: rabbitmq-definitions
+---
+# Service interne seulement : aucun Ingress ne le cite. 15692 pour Prometheus (SQ-07).
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  labels:
+    app: rabbitmq
+spec:
+  selector:
+    app: rabbitmq
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: amqp
+    - name: prometheus
+      port: 15692
+      targetPort: prometheus

@@ -1,0 +1,8 @@
+# RabbitMQ de app (SQ-05) : un broker, un compte par service au moindre privilège (docs/cadrage.md §1.2.10).
+# Secrets créés sur le VPS par deploy/scripts/rabbitmq-secrets.sh (ADR 0008, ADR 0010) :
+# rabbitmq-definitions (definitions.json), troc-rabbitmq et notification-rabbitmq (clé password).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: app
+resources:
+  - rabbitmq.yaml

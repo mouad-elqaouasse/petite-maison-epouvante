@@ -20,6 +20,9 @@
         <java.version>25</java.version>
         <!-- Non gérée par Spring Boot 4 ; 0.8.14 au moins pour Java 25. -->
         <jacoco.version>0.8.15</jacoco.version>
+        <!-- 5.30.0 imposée par Spring Boot 4.1.2 : CVE-2026-63337, -69219, -69220 et -75516 (HIGH, Trivy),
+             corrigées en 5.34.0. À retirer quand Spring Boot embarquera une version corrigée. -->
+        <rabbit-amqp-client.version>5.34.0</rabbit-amqp-client.version>
     </properties>
 
     <dependencies>
@@ -53,6 +56,11 @@
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- SQ-05 : connexion à RabbitMQ (compte du service, ADR 0010) et indicateur de santé rabbit. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
@@ -62,6 +70,12 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- SQ-05 : RabbitMQ réel (Testcontainers), coupé par Toxiproxy comme la base. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-rabbitmq</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
