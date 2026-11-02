@@ -40,5 +40,6 @@
 - Base `keycloak` vide (volume perdu) : le realm revient seul au démarrage, puis `keycloak-comptes.sh` est relancé.
 - Le JSON du dépôt peut diverger du realm en service : toute modification du realm se fait dans le JSON **et** par
   `kcadm.sh`, dans le même ticket.
-- L'administrateur de démarrage n'est créé qu'avec le realm `master` (premier démarrage) : sa variable reste dans le
-  manifest sans recréer le compte après sa suppression.
+- L'administrateur de démarrage est prévu pour n'être créé qu'avec le realm `master` (premier démarrage) : sa variable
+  reste dans le manifest. **Non vérifié par un redémarrage** (choix du 02/11/2026, SQ-06) : au prochain redémarrage de
+  Keycloak, contrôler que `admin-demarrage` est absent du realm `master`, sinon relancer `keycloak-comptes.sh`.
