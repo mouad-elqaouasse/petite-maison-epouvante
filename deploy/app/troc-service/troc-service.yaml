@@ -33,6 +33,17 @@ spec:
               containerPort: 8080
             - name: gestion
               containerPort: 8081
+          # Base troc avec le rôle troc ; mot de passe lu dans le Secret troc-db (SQ-04, ADR 0008).
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgresql:5432/troc
+            - name: SPRING_DATASOURCE_USERNAME
+              value: troc
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: troc-db
+                  key: password
           # Budget RAM : 256 / 384 Mio (docs/cadrage.md §1.4.18) ; JVM à 75 % de la limite (Dockerfile).
           resources:
             requests:
@@ -46,18 +57,21 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
-          # Démarrage d'environ 30 s à 500m de CPU (exp. 3) : jusqu'à 90 s tolérées avant redémarrage.
+          # Démarrage d'environ 30 s à 500m de CPU (exp. 3), plus environ 40 s de réessais de Flyway si la base
+          # est indisponible (ADR 0013) : jusqu'à 120 s tolérées avant redémarrage.
           startupProbe:
             httpGet:
               path: /actuator/health/liveness
               port: gestion
             periodSeconds: 3
-            failureThreshold: 30
+            failureThreshold: 40
+          # readiness inclut la santé db (ADR 0013) ; délai de 3 s, au-dessus de celui du pool (2 s).
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
               port: gestion
             periodSeconds: 5
+            timeoutSeconds: 3
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness

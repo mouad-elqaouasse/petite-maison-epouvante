@@ -1,0 +1,7 @@
+# PostgreSQL de app (SQ-04) : une instance, une base et un rôle par service (docs/schemas/base-de-donnees.md).
+# Secrets créés à la main sur le VPS (ADR 0008) : postgresql-admin, troc-db, notification-db, keycloak-db (clé password).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: app
+resources:
+  - postgresql.yaml
