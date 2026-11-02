@@ -18,6 +18,8 @@
 
     <properties>
         <java.version>25</java.version>
+        <!-- Non gérée par Spring Boot 4 ; 0.8.14 au moins pour Java 25. -->
+        <jacoco.version>0.8.15</jacoco.version>
     </properties>
 
     <dependencies>
@@ -47,6 +49,26 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <!-- Couverture pour SonarCloud (SQ-09) : target/site/jacoco/jacoco.xml produit par mvn verify. -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
