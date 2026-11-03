@@ -425,7 +425,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (pod) (jvm_memory_used_bytes{area=\"heap\"})",
+          "expr": "sum by (pod) (jvm_memory_used_bytes{job=~\"troc-service|notification-service\", area=\"heap\"})",
           "legendFormat": "{{pod}}"
         }
       ],
