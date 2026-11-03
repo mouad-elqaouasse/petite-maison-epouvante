@@ -4,7 +4,7 @@
 |---|---|
 | Service | `notification-service` (consommateur de `AnnoncePubliee`) |
 | Priorité MoSCoW | **Must** (`cadrage.md` §5) |
-| Dépendances | **US1a** (émission de `AnnoncePubliee`) et **US2** (abonnements). |
+| Dépendances | **US1a** (émission de `AnnoncePubliee`), **US2** (abonnements) et **SQ-13** (messages conservés au redémarrage de RabbitMQ, ajouté le 03/11/2026). |
 | Sources | `cadrage.md` §1.1 point 4, §1.2 points 7, 8, 10, §2 |
 
 ## User story

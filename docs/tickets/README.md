@@ -34,6 +34,7 @@ Aucun ticket « toute la base », « toute la CI » ou « tous les manifests ».
 | SQ-10 | [CodeQL et Dependabot](SQ-10-codeql-dependabot.md) | alertes dans l'onglet Security | SQ-03 | Should |
 | SQ-11 | [Protection de `main`](SQ-11-protection-main.md) | PR obligatoire, contrôles requis, commit du tag toujours possible | SQ-03, SQ-09 | Must |
 | SQ-12 | [Image Keycloak optimisée (bonus)](SQ-12-keycloak-optimise.md) | démarrage de Keycloak plus court et pic de mémoire plus bas | SQ-06 | Could |
+| SQ-13 | [Volume persistant pour RabbitMQ](SQ-13-rabbitmq-persistant.md) (ajouté le 03/11/2026) | messages en attente toujours présents après redémarrage du pod | SQ-05 ; avant US3 | Must |
 
 ```
 SQ-00 ─► SQ-01 ─► SQ-02 ─┬─► SQ-03 ─┬─────────────► SQ-06 ─┐
@@ -47,6 +48,8 @@ SQ-06 ─► SQ-12 (bonus)
 
 Ordre de travail proposé (une session par ticket, une PR par ticket) :
 SQ-00, SQ-01, SQ-02, SQ-03, SQ-09, SQ-04, SQ-05, SQ-06, SQ-07, SQ-11, SQ-10, SQ-08, puis SQ-12 s'il reste du temps.
+SQ-13 (ajouté le 03/11/2026) : au plus tard avant US3, pour que la garantie « au moins une fois » (`cadrage.md` §1.2.8) tienne
+au redémarrage du broker.
 SQ-09 passe tôt pour que le Quality Gate s'applique au code des tickets suivants ; SQ-08 reste en dernier,
 application fonctionnelle (`docs/cadrage.md` §1.4.14, ADR 0004).
 
