@@ -28,7 +28,7 @@ Aucun ticket « toute la base », « toute la CI » ou « tous les manifests ».
 | SQ-04 | [PostgreSQL et connexion des services](SQ-04-postgresql.md) | santé `db` UP dans les deux services | SQ-02 | Must |
 | SQ-05 | [RabbitMQ, comptes et connexion des services](SQ-05-rabbitmq.md) | santé `rabbit` UP dans les deux services | SQ-02 | Must |
 | SQ-06 | [Keycloak, realm et validation des jetons](SQ-06-keycloak-jetons.md) | connexion PKCE depuis la page, `/moi` affiche l'utilisateur et ses rôles | SQ-03, SQ-04 | Must |
-| SQ-07 | [Prometheus, kube-state-metrics et Grafana](SQ-07-observabilite.md) | toutes les cibles UP, tableau de bord « Squelette » par tunnel | SQ-05 | Must |
+| SQ-07 | [Prometheus, kube-state-metrics et Grafana](SQ-07-observabilite.md) | toutes les cibles UP, tableaux de bord « Santé » et « Montée en charge » (version squelette) par tunnel | SQ-05 | Must |
 | SQ-08 | [NetworkPolicies](SQ-08-networkpolicies.md) | matrice de flux conforme, application toujours fonctionnelle | SQ-06, SQ-07 | Should |
 | SQ-09 | [SonarCloud (Quality Gate bloquant)](SQ-09-sonarcloud.md) | Quality Gate visible sur chaque PR | SQ-02 | Must |
 | SQ-10 | [CodeQL et Dependabot](SQ-10-codeql-dependabot.md) | alertes dans l'onglet Security | SQ-03 | Should |
@@ -90,5 +90,5 @@ Seuls les identifiants de services externes (Cloudinary, US1b) restent saisis pa
 
 ## Hors de cette phase
 
-Fonctionnalités des US, dashboards « Santé » et « Montée en charge », 3 alertes, HPA, E2E Compose + Playwright,
+Fonctionnalités des US, panneaux métier des dashboards (latence p95 de `POST /annonces`, avancés en SQ-07 le 03/11/2026 pour le reste), 3 alertes, HPA, E2E Compose + Playwright,
 OWASP ZAP, rate limiting et `externalTrafficPolicy: Local`, sortie vers Cloudinary (avec US1b), campagnes JMeter.

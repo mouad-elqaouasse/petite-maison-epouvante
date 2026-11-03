@@ -1,0 +1,12 @@
+apiVersion: 1
+providers:
+  - name: app
+    folder: Épouvante
+    type: file
+    # Tableaux de bord en lecture seule : toute modification passe par le dépôt.
+    allowUiUpdates: false
+    disableDeletion: true
+    # Grafana relit les fichiers toutes les 10 s (mise à jour du ConfigMap monté : quelques dizaines de secondes, exp. 1).
+    updateIntervalSeconds: 10
+    options:
+      path: /etc/grafana/dashboards

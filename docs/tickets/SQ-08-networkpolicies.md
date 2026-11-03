@@ -21,9 +21,25 @@ Refus par défaut dans `app`, puis chaque flux nécessaire ouvert explicitement 
 | services-postgresql | `troc-service`, `notification-service`, Keycloak → PostgreSQL 5432 |
 | services-rabbitmq | `troc-service`, `notification-service` → RabbitMQ 5672 |
 | services-keycloak | `troc-service`, `notification-service` → Keycloak (JWKS, port HTTP interne) |
-| prometheus-cibles | Prometheus → 8081 des services, 15692 RabbitMQ, kube-state-metrics, Keycloak |
-| grafana-prometheus | Grafana → Prometheus |
+| prometheus-cibles | Prometheus → ports de collecte (détail ci-dessous) |
+| grafana-prometheus | Grafana → Prometheus 9090 |
 | sortie-api-k8s | Prometheus, kube-state-metrics → API Kubernetes (Service 443 **et** IP du nœud 6443) |
+
+Ports à ouvrir pour Prometheus (configuration de SQ-07, `deploy/app/prometheus/prometheus.yml`) :
+
+| Source | Destination | Port TCP | Usage |
+|---|---|---|---|
+| Prometheus | `troc-service`, `notification-service` (chaque pod) | 8081 | `/actuator/prometheus` (port de gestion, ADR 0007) |
+| Prometheus | RabbitMQ | 15692 | `/metrics` et `/metrics/detailed` (messages par file, DLQ) |
+| Prometheus | Keycloak | 9000 | `/metrics` |
+| Prometheus | kube-state-metrics | 8080 | `/metrics` |
+| Prometheus | API Kubernetes : Service `kubernetes.default` | 443 | découverte des pods et des nœuds, cAdvisor par le proxy de l'API |
+| Prometheus | API Kubernetes : IP du nœud | 6443 | même flux après traduction d'adresse (exp. 1, partie 5, B6) |
+| kube-state-metrics | API Kubernetes (Service 443 et IP du nœud 6443) | 443, 6443 | lecture des pods, Deployments, ReplicaSets, HPA de `app` |
+| Grafana | Prometheus | 9090 | source de données |
+
+Le tunnel `kubectl port-forward` vers Grafana (3000) et Prometheus (9090) ne passe pas par le réseau des pods : à vérifier
+après le refus total. Aucune sortie vers Internet pour Grafana (plugins préinstallés et vérifications de mises à jour désactivés).
 
 Pas de sortie vers Internet dans cette phase : la règle `troc-service` → 443 hors cluster arrive avec US1b (Cloudinary).
 Les règles de `flux-system` (exp. 3) restent inchangées.

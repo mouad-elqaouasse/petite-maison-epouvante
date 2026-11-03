@@ -1,0 +1,11 @@
+# Prometheus de app (SQ-07). Configuration générée depuis prometheus.yml, avec suffixe de hachage : toute modification
+# crée un nouveau ConfigMap et redémarre Prometheus, qui ne relit pas sa configuration de lui-même.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: app
+resources:
+  - prometheus.yaml
+configMapGenerator:
+  - name: prometheus-config
+    files:
+      - prometheus.yml
