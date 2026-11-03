@@ -39,3 +39,25 @@ Dans *Settings → Advanced Security* : Dependency graph, Dependabot alerts et D
 CodeQL laissé sur *Not set up* (configuration avancée). Dans *Settings → Secrets and variables → Dependabot* : ajouter
 `SONAR_TOKEN` (les PR Dependabot ne lisent pas les secrets Actions). Après la fusion : ajouter le contrôle Trivy config
 aux contrôles obligatoires du ruleset de `main` (SQ-11).
+
+## Résultats (03/11/2026) — PR [#25](https://github.com/mouad-elqaouasse/petite-maison-epouvante/pull/25), en cours
+
+- **Blocage démontré (critère 3)** : premier push (`1e73e97`, workflow seul, sans correctif) → contrôle `trivy-config`
+  **en échec** sur une seule erreur, KSV-0047 (HIGH, `nodes/proxy` de Prometheus) :
+  [exécution 41670269232](https://github.com/mouad-elqaouasse/petite-maison-epouvante/actions/runs/41670269232).
+  Second push (`3e5ac33`, correctif ADR 0016) → `trivy-config` **vert** :
+  [exécution 41670519891](https://github.com/mouad-elqaouasse/petite-maison-epouvante/actions/runs/41670519891).
+- **Tri initial de Trivy config** (12 erreurs critiques ou hautes) : 9 dans les composants Flux générés (KSV-0041,
+  KSV-0046) et 1 faux positif PostgreSQL (KSV-0109), en exception ; Keycloak KSV-0014 en exception jusqu'à SQ-12,
+  **qui expire le 01/01/2027** (`expired_at` : passée cette date, le contrôle échoue) ; Prometheus KSV-0047 corrigé.
+  Les Dockerfile n'ont aucune erreur critique ou haute.
+- **Onglet Security** : 89 alertes Trivy non bloquantes (15 moyennes, 74 faibles), **triées pendant la phase
+  sécurité** pour le plan de remédiation (`docs/cadrage.md` §8).
+- **CodeQL sur la PR** : 0 résultat en Java/Kotlin (76 règles) et en JavaScript/TypeScript (87 règles) ;
+  jobs de 1 min 7 s et 50 s. Le premier passage sur `main` reste à constater après la fusion.
+- **Dependabot** : `.github/dependabot.yml` validé par GitHub (contrôle vert). Première PR Dependabot attendue
+  après la fusion (critère 2).
+- **Réglages GitHub** faits par toi le 03/11/2026 : Dependabot alerts et security updates, secret Dependabot
+  `SONAR_TOKEN`. Contrôle `trivy-config` à ajouter au ruleset de `main` avec SQ-11 (repoussé en fin de phase).
+- **Reste après la fusion** : Prometheus redémarré par Flux, cible `kubernetes-cadvisor` UP et RAM du nœud
+  (`observabilite-verifier.sh`, `kubectl top`, `free -m`).
