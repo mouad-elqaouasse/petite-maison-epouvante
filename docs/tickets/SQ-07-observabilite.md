@@ -55,4 +55,38 @@ Toutes les métriques du squelette sont collectées et visibles dans Grafana, pa
 
 Avant le déploiement (03/11/2026, `free -m`, `kubectl top`) : 1 049 Mio disponibles, swap 92 Mio ; nœud à 2 559 Mio.
 
-Après le déploiement : à compléter.
+Après le déploiement (03/11/2026, 14:31 UTC, environ 10 min après le démarrage des pods) :
+
+| | Avant | Après |
+|---|---|---|
+| Disponible (`free -m`) | 1 049 Mio | 803 Mio |
+| Nœud (`kubectl top nodes`) | 2 559 Mio | 2 928 Mio |
+| Swap utilisé | 92 Mio | 154 Mio |
+
+| Composant | `kubectl top` | Mémoire propre (`anon`) | Pic (`memory.peak`) | Budget au pic (`cadrage.md` §1.4.18) |
+|---|---|---|---|---|
+| Prometheus (6 469 séries) | 72 Mio | 46 Mio | 117 Mio (démarrage) | 100 Mio |
+| Grafana | 262 Mio | 211 Mio | 320 Mio (= limite) | 220 Mio |
+| kube-state-metrics | 12 Mio | — (image sans shell) | — | 30 Mio |
+
+- Aucun OOM (`oom_kill 0`) ; dossier des plugins de Grafana vide (4 Ko) : la correction de l'exp. 1 tient.
+- **Grafana dépasse son estimation** (262 contre 220 Mio) et son pic atteint la limite de 320 Mio : le pic compte le
+  cache de fichiers, récupéré par le noyau sans arrêt du pod. Avec 256 Mio, le risque d'OOM était réel : la décision 3
+  est confirmée. À surveiller pendant les campagnes de charge (panneau « RAM par conteneur » de « Santé »).
+- Prometheus et kube-state-metrics restent sous leur estimation. Au total, la stack d'observabilité coûte ≈ 350 Mio
+  (`kubectl top`), dans le budget de 350 Mio au pic (100 + 220 + 30).
+
+## Vérification (03/11/2026)
+
+- `deploy/scripts/observabilite-verifier.sh` : 0 écart. 8 cibles UP (prometheus, kubernetes-cadvisor,
+  kube-state-metrics, troc-service, notification-service, keycloak, rabbitmq, rabbitmq-files) ; tableaux de bord
+  `sante` et `montee-en-charge` présents ; aucune métrique lisible depuis Internet (hôte public : page du front ;
+  `/api/troc/…` et `/api/notifications/…` : 401).
+- Après redémarrage de Grafana : source de données et tableaux de bord provisionnés au démarrage
+  (`inserting datasource from configuration`, `finished to provision dashboards`), sans configuration manuelle.
+- Requêtes des panneaux contrôlées dans Prometheus : toutes renvoient des données (DLQ à 0, replicas par
+  kube-state-metrics, CPU sur `[2m]`, heap, RAM du nœud, redémarrages).
+- Corrections après le premier passage : le script lisait mal le code HTTP de l'API de Grafana (`$2` remplacé par le
+  shell du pod) ; le panneau « Heap JVM » incluait Keycloak (filtre sur les deux services ajouté).
+- Constat : `kubectl rollout restart` est annulé par Flux (l'annotation n'est pas dans le dépôt, correction de dérive) :
+  le pod redémarre deux fois. Sous Flux, redémarrer un pod par `kubectl delete pod`.

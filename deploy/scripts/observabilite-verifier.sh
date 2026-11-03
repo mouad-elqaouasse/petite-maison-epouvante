@@ -37,7 +37,7 @@ fi
 # 2. Tableaux de bord (API de Grafana, compte administrateur lu dans le pod)
 for uid in $TABLEAUX; do
   code=$(kubectl -n "$NS" exec deploy/grafana -- sh -c \
-    'wget -qS -O /dev/null "http://admin:${GF_SECURITY_ADMIN_PASSWORD}@localhost:3000/api/dashboards/uid/'"$uid"'" 2>&1 | awk "/HTTP\// {print $2; exit}"' 2>/dev/null)
+    'wget -qS -O /dev/null "http://admin:${GF_SECURITY_ADMIN_PASSWORD}@localhost:3000/api/dashboards/uid/'"$uid"'" 2>&1 | awk "/HTTP\// {print \$2; exit}"' 2>/dev/null)
   if [ "$code" = "200" ]; then ok "tableau de bord $uid provisionné"; else ecart "tableau de bord $uid absent (code ${code:-aucun})"; fi
 done
 
