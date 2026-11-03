@@ -142,7 +142,7 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
 | PostgreSQL (une instance, une base par service) | 1 | 64 / 256 Mio | 45 Mio | 80 Mio |
 | RabbitMQ (sonde `tcpSocket`, exp. 2) | 1 | 128 / 256 Mio | 83 Mio (exp. 2 : 95 Mio, 126 avec 10 000 messages) | 130 Mio |
 | Prometheus | 1 | 64 / 256 Mio | 40 Mio | 100 Mio |
-| Grafana | 1 | 128 / 256 Mio | 208 Mio (mémoire propre) | 220 Mio |
+| Grafana | 1 | 128 / 320 Mio (limite relevée le 03/11/2026, SQ-07) | 208 Mio (mémoire propre) | 220 Mio |
 | kube-state-metrics | 1 | 32 / 64 Mio | — | 30 Mio |
 | Flux (source- et kustomize-controller) | 1 chacun | 64 / 256 Mio par contrôleur | ≈ 50 Mio (exp. 3) | 100 Mio |
 | Front nginx | 1 | 16 / 32 Mio | — | 10 Mio |
