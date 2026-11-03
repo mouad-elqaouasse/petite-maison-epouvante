@@ -1,7 +1,7 @@
 # Prometheus 3.15.1 (version de l'exp. 1), manifests simples, sans kube-prometheus-stack (docs/cadrage.md §1.4.16).
 # Collecte toutes les 30 s ; fenêtres rate d'au moins [2m] dans les tableaux de bord (exp. 1, partie 5, étape A1 bis).
 # Stockage emptyDir : l'historique est perdu à chaque redémarrage du pod (limite du POC, ticket SQ-07).
-# Droits (ADR 0015) : Role dans app pour découvrir les pods des services ; ClusterRole minimal pour cAdvisor (nœud).
+# Droits (ADR 0015, révisée par ADR 0016) : Role dans app pour découvrir les pods des services ; ClusterRole minimal pour cAdvisor (nœud).
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -35,7 +35,8 @@ subjects:
     name: prometheus
 ---
 # Les nœuds n'appartiennent à aucun namespace : un Role ne peut pas y donner accès (ADR 0015).
-# Lecture seule : liste des nœuds (découverte) et métriques cAdvisor par le proxy de l'API.
+# Lecture seule : liste des nœuds (découverte) et métriques cAdvisor lues sur le kubelet.
+# nodes/metrics et non nodes/proxy : ce dernier ouvre toute l'API du kubelet, exécution dans les pods comprise (ADR 0016).
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -47,7 +48,7 @@ rules:
     resources: ["nodes"]
     verbs: ["list", "watch"]
   - apiGroups: [""]
-    resources: ["nodes/proxy"]
+    resources: ["nodes/metrics"]
     verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

@@ -1,0 +1,29 @@
+# Exceptions de Trivy config (workflow securite-config.yml, ticket SQ-10) : une entrée par règle et par fichier,
+# chacune avec sa justification. Toute nouvelle exception passe par une PR relue.
+misconfigurations:
+  # Composants Flux générés par Flux v2.9.6 (en-tête du fichier), non modifiés : les contrôleurs de Flux doivent
+  # gérer toutes les ressources qu'ils appliquent, Secrets compris. Droits de l'éditeur, revus à chaque mise à jour de Flux.
+  - id: KSV-0041
+    paths:
+      - deploy/flux/10-flux-composants.yaml
+    statement: "ClusterRole de l'éditeur Flux : lecture des Secrets nécessaire à la synchronisation."
+  - id: KSV-0046
+    paths:
+      - deploy/flux/10-flux-composants.yaml
+    statement: "ClusterRoles de l'éditeur Flux (crd-controller, flux-edit, flux-view) sur ses propres CRD."
+
+  # Keycloak standard : `start` reconstruit sa configuration dans /opt/keycloak/lib/quarkus à chaque démarrage.
+  # Exception temporaire, retirée par SQ-12 (image optimisée, `start --optimized`, racine en lecture seule).
+  # Réexamen au plus tard le 01/01/2027, après la soutenance : passée cette date, l'exception tombe et le contrôle échoue.
+  - id: KSV-0014
+    paths:
+      - deploy/app/keycloak/keycloak.yaml
+    expired_at: 2027-01-01
+    statement: "Démarrage non optimisé qui écrit dans l'image ; à retirer avec SQ-12."
+
+  # Faux positif : le script d'initialisation contient le mot PASSWORD (syntaxe SQL), les valeurs viennent de variables
+  # d'environnement alimentées par des Secrets (SQ-04), jamais de la ConfigMap.
+  - id: KSV-0109
+    paths:
+      - deploy/app/postgresql/postgresql.yaml
+    statement: "Aucun secret dans la ConfigMap postgresql-init : mots de passe lus dans des Secrets par variables psql."

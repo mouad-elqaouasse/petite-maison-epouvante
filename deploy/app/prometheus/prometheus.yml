@@ -51,21 +51,17 @@ scrape_configs:
       - targets: ["kube-state-metrics:8080"]
 
   # CPU et RAM des conteneurs, RAM du nœud. Seules les séries de app et du nœud entier sont gardées.
+  # Lu directement sur le kubelet (IP du nœud:10250, adresse par défaut de la découverte) avec le droit nodes/metrics,
+  # sans le proxy de l'API (ADR 0016). Certificat du kubelet signé par la CA du cluster, IP du nœud dans ses SAN.
   - job_name: kubernetes-cadvisor
     scheme: https
+    metrics_path: /metrics/cadvisor
     tls_config:
       ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
     authorization:
       credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
     kubernetes_sd_configs:
       - role: node
-    relabel_configs:
-      - target_label: __address__
-        replacement: kubernetes.default.svc:443
-      - source_labels: [__meta_kubernetes_node_name]
-        regex: (.+)
-        target_label: __metrics_path__
-        replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
     metric_relabel_configs:
       - source_labels: [namespace, id, __name__]
         regex: "app;.*;.*|;/;.*|.*;.*;machine_memory_bytes"

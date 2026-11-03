@@ -87,6 +87,7 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
 | Build | SAST (analyse statique) | SonarCloud | Oui (Quality Gate) |
 | Build | SCA (analyse des dépendances) | Dependabot + Trivy fs | Oui si critique/haute |
 | Images | Scan d'images | Trivy image | Oui si critique/haute |
+| Manifests et Dockerfile | Mauvaises configurations (IaC) | Trivy config | Oui si critique/haute (ajouté le 03/11/2026, SQ-10) |
 | Stack Compose | DAST (test dynamique) | OWASP ZAP baseline | Non (rapport) |
 
 ### 1.4 Déploiement et exploitation [P1, P3, Q3]

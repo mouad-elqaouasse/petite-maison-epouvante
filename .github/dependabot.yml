@@ -1,0 +1,76 @@
+# Veille sur les dépendances (ticket SQ-10, docs/cadrage.md §1.3.13 et §5) : une PR par écosystème et par semaine
+# (correctifs mineurs et de patch regroupés), majeures à part. Chaque PR passe par toute la CI, SonarCloud compris
+# (secret SONAR_TOKEN aussi déclaré dans les secrets Dependabot du dépôt).
+# Images des manifests de deploy/app/ non suivies : le tag de nos images y est écrit par la CI (ADR 0009).
+# Délai de 7 jours avant de proposer une version (cooldown) : une version compromise est souvent retirée entre-temps ;
+# les mises à jour de sécurité ne l'attendent pas.
+version: 2
+
+updates:
+  - package-ecosystem: maven
+    directories:
+      - /troc-service
+      - /notification-service
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+    groups:
+      maven-mineures:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /front
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+    groups:
+      # Paquets Angular publiés ensemble : une seule PR, sinon les versions croisées ne s'installent pas.
+      angular:
+        patterns: ["@angular/*", "@angular-devkit/*", "@schematics/angular"]
+      npm-mineures:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directories:
+      - /troc-service
+      - /notification-service
+      - /front
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+    groups:
+      images-mineures:
+        update-types: [minor, patch]
+    ignore:
+      # Node du conteneur de build aligné sur celui de la CI (setup-node 22.22) : changement de majeure à la main.
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]

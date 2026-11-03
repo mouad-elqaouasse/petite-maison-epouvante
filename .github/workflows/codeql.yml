@@ -1,0 +1,67 @@
+# Analyse statique CodeQL (ticket SQ-10), résultats dans l'onglet Security. Configuration avancée : le build Java passe
+# par mvnw, ce que la « default setup » ne permet pas ; celle-ci doit rester désactivée dans les réglages du dépôt.
+# Non bloquant au départ : SonarCloud reste la porte bloquante (docs/cadrage.md §1.3.13) ; à revoir après le premier passage.
+name: codeql
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Chaque lundi à 5 h 17 UTC : nouvelles requêtes CodeQL appliquées au code inchangé.
+    - cron: "17 5 * * 1"
+
+permissions:
+  contents: read
+
+# Sur une PR, un nouveau push annule l'analyse précédente.
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyse:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: java-kotlin
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - if: matrix.language == 'java-kotlin'
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+          cache-dependency-path: "*-service/pom.xml"
+
+      # experimentations/ exclu (bac à sable), comme pour Trivy config.
+      - uses: github/codeql-action/init@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          config: |
+            paths-ignore:
+              - experimentations
+              - front/node_modules
+
+      # Compilation seule : les tests tournent déjà dans les workflows des composants.
+      - name: Compilation des deux services
+        if: matrix.language == 'java-kotlin'
+        run: |
+          (cd troc-service && ./mvnw -B -DskipTests compile)
+          (cd notification-service && ./mvnw -B -DskipTests compile)
+
+      - uses: github/codeql-action/analyze@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          category: /language:${{ matrix.language }}

@@ -1,6 +1,6 @@
 # ADR 0015 — Droits de Prometheus : `Role` dans `app`, `ClusterRole` minimal pour cAdvisor
 
-- Statut : acceptée
+- Statut : acceptée ; point 2 de la décision remplacé par l'ADR 0016 (03/11/2026)
 - Date : 2026-11-03
 - Source : ticket SQ-07 (`docs/tickets/SQ-07-observabilite.md`, Décisions 2) ; `docs/cadrage.md` §1.4.16 ;
   exp. 1, partie 2, étape I (`experimentations/exp1/40-prometheus.yaml`) et partie 5, étape A1 bis

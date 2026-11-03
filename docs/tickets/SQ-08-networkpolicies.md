@@ -33,8 +33,9 @@ Ports à ouvrir pour Prometheus (configuration de SQ-07, `deploy/app/prometheus/
 | Prometheus | RabbitMQ | 15692 | `/metrics` et `/metrics/detailed` (messages par file, DLQ) |
 | Prometheus | Keycloak | 9000 | `/metrics` |
 | Prometheus | kube-state-metrics | 8080 | `/metrics` |
-| Prometheus | API Kubernetes : Service `kubernetes.default` | 443 | découverte des pods et des nœuds, cAdvisor par le proxy de l'API |
+| Prometheus | API Kubernetes : Service `kubernetes.default` | 443 | découverte des pods et des nœuds |
 | Prometheus | API Kubernetes : IP du nœud | 6443 | même flux après traduction d'adresse (exp. 1, partie 5, B6) |
+| Prometheus | kubelet : IP du nœud | 10250 | cAdvisor `/metrics/cadvisor`, lu directement (ADR 0016, ajouté le 03/11/2026) |
 | kube-state-metrics | API Kubernetes (Service 443 et IP du nœud 6443) | 443, 6443 | lecture des pods, Deployments, ReplicaSets, HPA de `app` |
 | Grafana | Prometheus | 9090 | source de données |
 
