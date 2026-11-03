@@ -1,0 +1,61 @@
+# Mauvaises configurations des manifests (deploy/) et des Dockerfile : Trivy config, bloquant si critique ou haute
+# (docs/cadrage.md §1.3.13, ticket SQ-10). experimentations/ exclu (bac à sable).
+# Sans filtre de chemin : contrôle obligatoire de main (SQ-11), il doit tourner sur toutes les PR.
+# Exceptions justifiées une par une dans .trivyignore.yaml.
+name: securite-config
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Sur une PR, un nouveau push annule l'analyse précédente.
+concurrency:
+  group: securite-config-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  TRIVY_VERSION: v0.76.1
+
+jobs:
+  trivy-config:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Rapport complet (toutes gravités) pour l'onglet Security ; ne bloque pas.
+      - name: Trivy config, rapport SARIF
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          scan-type: config
+          scan-ref: .
+          skip-dirs: experimentations
+          trivyignores: .trivyignore.yaml
+          format: sarif
+          output: trivy-config.sarif
+
+      - name: Envoi dans l'onglet Security
+        uses: github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          sarif_file: trivy-config.sarif
+          category: trivy-config
+
+      - name: Trivy config (bloquant si critique ou haute)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          scan-type: config
+          scan-ref: .
+          skip-dirs: experimentations
+          trivyignores: .trivyignore.yaml
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          format: table
