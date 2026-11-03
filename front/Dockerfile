@@ -1,6 +1,6 @@
 # front — build multi-étapes : Angular construit par Node, servi par nginx non-root (docs/cadrage.md §1.4.14).
 # Les tests unitaires tournent avant, dans la CI (front.yml) ; ce build part du même package-lock.json.
-FROM node:22.22-alpine3.24 AS build
+FROM node:22.23-alpine3.24 AS build
 WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
