@@ -1,0 +1,72 @@
+# Configuration de Prometheus pour app (SQ-07), transformée en ConfigMap par kustomization.yaml.
+global:
+  scrape_interval: 30s
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Une cible par pod (et non par Service) : chaque replica de troc-service est collecté (HPA à venir).
+  # Pods annotés prometheus.io/scrape, prometheus.io/port et prometheus.io/path ; job = label app.
+  - job_name: services
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [app]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        regex: "true"
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_ip, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        regex: (.+);(.+)
+        target_label: __address__
+        replacement: $1:$2
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        regex: (.+)
+        target_label: __metrics_path__
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        target_label: job
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+
+  # Composants à un seul pod : collectés par leur Service, sans redémarrage pour poser des annotations.
+  - job_name: keycloak
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["keycloak:9000"]
+  - job_name: rabbitmq
+    static_configs:
+      - targets: ["rabbitmq:15692"]
+  # Messages par file (dont la DLQ) : /metrics agrège toutes les files, sans label queue.
+  - job_name: rabbitmq-files
+    metrics_path: /metrics/detailed
+    params:
+      family: [queue_coarse_metrics]
+    static_configs:
+      - targets: ["rabbitmq:15692"]
+  # honor_labels : garder namespace et pod décrits par kube-state-metrics, pas ceux de sa cible.
+  - job_name: kube-state-metrics
+    honor_labels: true
+    static_configs:
+      - targets: ["kube-state-metrics:8080"]
+
+  # CPU et RAM des conteneurs, RAM du nœud. Seules les séries de app et du nœud entier sont gardées.
+  - job_name: kubernetes-cadvisor
+    scheme: https
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    authorization:
+      credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    kubernetes_sd_configs:
+      - role: node
+    relabel_configs:
+      - target_label: __address__
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+    metric_relabel_configs:
+      - source_labels: [namespace, id, __name__]
+        regex: "app;.*;.*|;/;.*|.*;.*;machine_memory_bytes"
+        action: keep

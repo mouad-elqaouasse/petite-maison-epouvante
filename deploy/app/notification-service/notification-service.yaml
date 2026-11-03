@@ -16,6 +16,11 @@ spec:
     metadata:
       labels:
         app: notification-service
+      # Collecte par Prometheus, pod par pod (SQ-07) : port de gestion, jamais cité par l'Ingress (ADR 0007).
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8081"
+        prometheus.io/path: /actuator/prometheus
     spec:
       automountServiceAccountToken: false
       securityContext:

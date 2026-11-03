@@ -1,0 +1,21 @@
+# Grafana de app (SQ-07). Secret grafana-admin créé sur le VPS par deploy/scripts/grafana-secrets.sh (ADR 0008).
+# Tableaux de bord sans suffixe de hachage : Grafana relit ses fichiers sans redémarrer (exp. 1, partie 5).
+# Source de données et fournisseur avec suffixe : relus seulement au démarrage, leur modification redémarre Grafana.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: app
+resources:
+  - grafana.yaml
+configMapGenerator:
+  - name: grafana-datasources
+    files:
+      - prometheus.yaml=provisioning/datasources.yaml
+  - name: grafana-dashboard-provider
+    files:
+      - fichiers.yaml=provisioning/dashboards.yaml
+  - name: grafana-dashboards
+    files:
+      - sante.json=dashboards/sante.json
+      - montee-en-charge.json=dashboards/montee-en-charge.json
+    options:
+      disableNameSuffixHash: true

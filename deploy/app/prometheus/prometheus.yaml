@@ -1,0 +1,158 @@
+# Prometheus 3.15.1 (version de l'exp. 1), manifests simples, sans kube-prometheus-stack (docs/cadrage.md §1.4.16).
+# Collecte toutes les 30 s ; fenêtres rate d'au moins [2m] dans les tableaux de bord (exp. 1, partie 5, étape A1 bis).
+# Stockage emptyDir : l'historique est perdu à chaque redémarrage du pod (limite du POC, ticket SQ-07).
+# Droits (ADR 0015) : Role dans app pour découvrir les pods des services ; ClusterRole minimal pour cAdvisor (nœud).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+---
+# Les nœuds n'appartiennent à aucun namespace : un Role ne peut pas y donner accès (ADR 0015).
+# Lecture seule : liste des nœuds (découverte) et métriques cAdvisor par le proxy de l'API.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: app-prometheus-cadvisor
+  labels:
+    app: prometheus
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes/proxy"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: app-prometheus-cadvisor
+  labels:
+    app: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: app-prometheus-cadvisor
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: app
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  # Un seul pod à la fois : deux Prometheus ne servent à rien sur un emptyDir et coûtent de la RAM.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.15.1
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            # Rétention courte : deux jours couvrent une campagne de charge et la démo ; plafond de taille en plus.
+            - --storage.tsdb.retention.time=2d
+            - --storage.tsdb.retention.size=200MB
+          ports:
+            - name: http
+              containerPort: 9090
+          # Budget RAM : 64 / 256 Mio, 100 Mio au pic (docs/cadrage.md §1.4.18 ; 40 Mio pour 5 100 séries en exp. 1).
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: http
+            periodSeconds: 20
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+              readOnly: true
+            - name: data
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: data
+          emptyDir:
+            sizeLimit: 512Mi
+---
+# Service interne : lu par Grafana et par tunnel ; aucun Ingress ne le cite.
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http

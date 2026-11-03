@@ -1,0 +1,6 @@
+# kube-state-metrics de app (SQ-07).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: app
+resources:
+  - kube-state-metrics.yaml

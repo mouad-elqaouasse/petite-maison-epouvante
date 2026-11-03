@@ -1,0 +1,128 @@
+# Grafana 13.3.0 (version de l'exp. 1). Accessible par tunnel seulement : aucun Ingress ne le cite.
+#   ssh -t -o ExitOnForwardFailure=yes -L 3000:localhost:3000 ubuntu@51.178.39.218 'kubectl -n app port-forward svc/grafana 3000:3000'
+# Mot de passe administrateur dans le Secret grafana-admin, généré sur le VPS par deploy/scripts/grafana-secrets.sh (ADR 0008).
+# Source de données et tableaux de bord provisionnés depuis le dépôt, en lecture seule dans Grafana ; base interne en
+# emptyDir : rien d'autre n'est à conserver.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 472
+        runAsGroup: 472
+        fsGroup: 472
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: grafana
+          image: grafana/grafana:13.3.0
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: admin
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: password
+            # Sans ce réglage, Grafana télécharge ~430 Mo de plugins à chaque démarrage (exp. 1, partie 2, étape K).
+            - name: GF_PLUGINS_PREINSTALL_DISABLED
+              value: "true"
+            # Aucun appel sortant inutile (statistiques, vérification des mises à jour, actualités).
+            - name: GF_ANALYTICS_REPORTING_ENABLED
+              value: "false"
+            - name: GF_ANALYTICS_CHECK_FOR_UPDATES
+              value: "false"
+            - name: GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES
+              value: "false"
+            - name: GF_NEWS_NEWS_FEED_ENABLED
+              value: "false"
+          # Budget RAM : 128 / 320 Mio (décision du 03/11/2026, ticket SQ-07) : 208 Mio de mémoire propre en exp. 1,
+          # 286 Mio après quelques heures ; 256 Mio laissaient trop peu de marge pour la charge et la démo.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 320Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+              readOnly: true
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+              readOnly: true
+            - name: dashboards
+              mountPath: /etc/grafana/dashboards
+              readOnly: true
+            # Base interne, sessions et plugins ; le reste du système de fichiers est en lecture seule.
+            - name: data
+              mountPath: /var/lib/grafana
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboard-provider
+          configMap:
+            name: grafana-dashboard-provider
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
+        - name: data
+          emptyDir:
+            sizeLimit: 128Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  labels:
+    app: grafana
+spec:
+  selector:
+    app: grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
