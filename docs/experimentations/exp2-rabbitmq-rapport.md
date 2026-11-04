@@ -80,6 +80,7 @@ pour RabbitMQ.
 
 - Clients Python, pas Spring AMQP : le comportement de Spring (nack ou reject, retry) reste à vérifier.
 - Pas de panne du broker : stockage `emptyDir`, les messages ne survivraient pas à la perte du pod RabbitMQ.
+  Traité dans `app` par SQ-13 (ADR 0018, 04/11/2026) : StatefulSet et volume persistant.
 - Réessais immédiats, sans délai entre eux ; une panne du consommateur compte comme un échec (3 pannes → DLQ).
 - Perte possible entre commit et publication non testée (limite assumée du cadrage, outbox au plan de remédiation).
 - NATS : RAM au repos seulement ; ni débit, ni rétention, ni DLQ (absente nativement de JetStream).

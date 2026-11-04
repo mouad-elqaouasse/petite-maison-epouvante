@@ -1,0 +1,42 @@
+=== SQ-13 — persistance des messages RabbitMQ (2026-11-04 14:32:53 UTC)
+NAME                        READY   STATUS    RESTARTS   AGE     IP            NODE           NOMINATED NODE   READINESS GATES
+rabbitmq-58bf97d678-wt96v   1/1     Running   0          5m40s   10.42.0.134   vps-c67c8a44   <none>           <none>
+NAME              STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+postgresql-data   Bound    pvc-10f6c38a-a61c-484a-8730-d21c84956027   2Gi        RWO            local-path     <unset>                 2d
+Nom du nœud Erlang : 'rabbit@rabbitmq-58bf97d678-wt96v'
+RAM disponible : 919 Mio
+
+--- 1. notification-service arrêté (0 replica)
+deployment.apps/notification-service scaled
+
+--- 2. troc publie 10 messages
+OK : troc publie 10 messages persistants (confirmés, routés)
+name	messages_ready	messages_unacknowledged	consumers
+notification.annonce-publiee.dlq	0	0	0
+notification.annonce-publiee	10	0	0
+Messages prêts avant la suppression du pod : 10 (attendu : 10)
+
+--- 3. kubectl delete pod rabbitmq-58bf97d678-wt96v
+pod "rabbitmq-58bf97d678-wt96v" deleted from app namespace
+Nouveau pod rabbitmq-58bf97d678-bxzbl prêt en 24 s ; minimum disponible : 1095 Mio
+Nom du nœud Erlang : 'rabbit@rabbitmq-58bf97d678-bxzbl'
+
+--- 4. après la suppression du pod
+name	messages_ready	messages_unacknowledged	consumers
+notification.annonce-publiee.dlq	0	0	0
+notification.annonce-publiee	0	0	0
+Messages prêts après la suppression du pod : 0 (attendu : 10)
+ECART : 0 au lieu de 10 après la suppression
+OK : compte troc accepté
+OK : compte notification accepté
+
+--- 5. nettoyage
+OK : notification lit et acquitte 0 messages
+Waiting for deployment "notification-service" rollout to finish: 0 of 1 updated replicas are available...
+deployment "notification-service" successfully rolled out
+name	messages_ready	messages_unacknowledged	consumers
+notification.annonce-publiee.dlq	0	0	0
+notification.annonce-publiee	0	0	0
+RAM disponible : 905 Mio
+
+=== Écarts : 1
