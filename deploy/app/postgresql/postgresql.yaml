@@ -27,12 +27,15 @@ data:
       REVOKE ALL ON DATABASE keycloak FROM PUBLIC;
     EOSQL
 ---
+# local-path efface le disque avec le PVC : Flux ne doit jamais le supprimer, même s'il disparaît du dépôt (ADR 0018).
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: postgresql-data
   labels:
     app: postgresql
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
 spec:
   accessModes: ["ReadWriteOnce"]
   storageClassName: local-path

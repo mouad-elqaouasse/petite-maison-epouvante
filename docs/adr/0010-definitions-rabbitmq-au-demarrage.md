@@ -35,3 +35,4 @@
 - Après une recréation du pod, comptes et topologie sont identiques, sans geste manuel (critère d'acceptation de SQ-05).
 - La structure des définitions (sans les hachés) est versionnée et relue en PR ; le Secret est régénéré si elle change.
 - Les messages restent perdus si le pod est recréé (stockage `emptyDir`) : limite inchangée, au plan de remédiation.
+  **Remplacé le 04/11/2026 par l'ADR 0018** (StatefulSet et volume persistant, SQ-13).
