@@ -1,0 +1,46 @@
+# SQ-08 — pod « intrus » : busybox dans app avec le label du front (app: front).
+# Il reçoit donc les mêmes NetworkPolicies que le front, et sert à vérifier ce qu'un conteneur du front compromis atteint.
+# Même securityContext que le front (deploy/app/front/front.yaml). Pas de automountServiceAccountToken : le pod prend
+# le réglage du ServiceAccount default de app, pour montrer son effet.
+# ENABLE_SERVICE_LINKS : remplacé par intrus.sh par la valeur du Deployment front (true si absente).
+# Sonde de disponibilité toujours en échec : le pod n'est jamais « prêt », donc jamais ajouté aux endpoints du Service
+# front (sinon une partie du trafic public arriverait sur l'intrus).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: intrus-front
+  namespace: app
+  labels:
+    app: front
+    sq-08: intrus
+spec:
+  enableServiceLinks: ENABLE_SERVICE_LINKS
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: intrus
+      image: busybox:1.37.0
+      imagePullPolicy: IfNotPresent
+      command: ["sleep", "3600"]
+      resources:
+        requests:
+          cpu: 10m
+          memory: 8Mi
+        limits:
+          cpu: 100m
+          memory: 32Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+      readinessProbe:
+        exec:
+          command: ["false"]
+        periodSeconds: 30
