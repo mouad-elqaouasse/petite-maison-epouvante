@@ -30,7 +30,11 @@
 3. **Annotation `kustomize.toolkit.fluxcd.io/prune: disabled`** sur `rabbitmq-data` et `postgresql-data` : Flux ne
    supprime jamais ces PVC, même retirés du dépôt. Leur suppression reste un geste manuel, avec l'accord du Lead Developer.
 4. `load_definitions` (ADR 0010) conservé : comptes et topologie redéclarés à chaque démarrage, à l'identique.
-5. Bascule : Deployment supprimé **avant** la création du StatefulSet (jamais deux RabbitMQ en même temps) ; coupure
+5. **`fsGroupChangePolicy: OnRootMismatch`** avec `fsGroup: 101` (ajouté le 04/11/2026 après l'incident de la bascule) :
+   le PV `local-path` est de type `local`, Kubernetes applique `fsGroup` à chaque montage et rendait le cookie Erlang
+   lisible par le groupe (`-rw-rw----`) ; RabbitMQ refuse alors de démarrer. Avec `OnRootMismatch`, le changement n'a
+   lieu que si le dossier racine n'a pas déjà le groupe 101 (premier montage, volume encore vide).
+6. Bascule : Deployment supprimé **avant** la création du StatefulSet (jamais deux RabbitMQ en même temps) ; coupure
    assumée, mesurée dans le ticket.
 
 ## Alternatives écartées
@@ -40,6 +44,7 @@
 | Deployment + nom de nœud fixe (`RABBITMQ_NODENAME=rabbit@localhost`) | nom stable, mais après `kubectl delete pod` deux pods montent brièvement le même volume (même nœud Erlang, mêmes fichiers) : risque de corruption |
 | `volumeClaimTemplates` dans le StatefulSet | PVC créé hors du dépôt, donc invisible en revue et non annotable par Flux |
 | Garder l'`emptyDir` (ADR 0010) | contraire à §1.2.8 dès qu'un consommateur réel existe (US3) |
+| Retirer `fsGroup` du pod | dépend des droits 0777 que `local-path` donne au dossier, réglage hors de notre contrôle |
 | Opérateur RabbitMQ (cluster operator) | conçu pour plusieurs nœuds ; RAM d'un pod de plus pour un seul broker |
 
 ## Conséquences
@@ -47,6 +52,8 @@
 - Les messages en attente survivent à la recréation du pod (capture `docs/soutenance/captures/sq-13/apres.txt`).
 - Label `app: rabbitmq`, Service et ports inchangés : NetworkPolicies (ADR 0017), cibles Prometheus et tableaux de bord
   inchangés.
+- Un PV `local-path` reçoit `fsGroup` à chaque montage sans `OnRootMismatch` : à vérifier pour tout composant qui exige
+  des droits stricts sur ses fichiers.
 - Le nom de nœud dépend du nom du StatefulSet : le renommer rendrait les données invisibles (ADR à remplacer d'abord).
 - Mono-nœud : le volume est sur le disque du VPS ; la perte du VPS reste une perte de messages (plan de remédiation).
 - Perte possible entre le commit en base et la publication (outbox, plan de remédiation) : inchangée.
