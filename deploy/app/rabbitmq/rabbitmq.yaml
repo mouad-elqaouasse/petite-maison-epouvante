@@ -1,4 +1,4 @@
-# RabbitMQ 4.4 (image des exp. 1 et 2), un pod, stockage emptyDir, Service interne seulement (SQ-05).
+# RabbitMQ 4.4 (image des exp. 1 et 2), un pod, volume local-path, Service interne seulement (SQ-05, SQ-13).
 # Comptes et topologie chargés au démarrage depuis le Secret rabbitmq-definitions (ADR 0010) : aucun compte guest,
 # aucun compte administrateur ; diagnostic ponctuel par rabbitmqctl dans le pod (cookie Erlang, ADR 0005).
 apiVersion: v1
@@ -13,8 +13,27 @@ data:
     definitions.import_backend = local_filesystem
     definitions.local.path = /etc/rabbitmq/definitions/definitions.json
 ---
+# local-path efface le disque avec le PVC : Flux ne doit jamais le supprimer, même s'il disparaît du dépôt (ADR 0018).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rabbitmq-data
+  labels:
+    app: rabbitmq
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
+---
+# StatefulSet et pas Deployment (ADR 0018) : nom d'hôte stable rabbitmq-0, donc nœud Erlang rabbit@rabbitmq-0 sous
+# lequel les données et la file quorum sont rangées ; et jamais deux pods à la fois sur le volume, y compris après un
+# kubectl delete pod (local-path ne fait respecter ReadWriteOnce que par nœud).
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: rabbitmq
   labels:
@@ -22,8 +41,10 @@ metadata:
 spec:
   replicas: 1
   revisionHistoryLimit: 3
-  strategy:
-    type: Recreate
+  # Seul usage : le nom d'hôte du pod ; aucun enregistrement DNS par pod n'est nécessaire.
+  serviceName: rabbitmq
+  updateStrategy:
+    type: RollingUpdate
   selector:
     matchLabels:
       app: rabbitmq
@@ -77,7 +98,7 @@ spec:
             periodSeconds: 20
           volumeMounts:
             # Données, cookie Erlang et fichiers temporaires ; le reste du système de fichiers est en lecture seule.
-            # emptyDir : messages perdus si le pod est recréé (limite assumée, ADR 0010).
+            # Volume persistant : les messages en attente survivent à la recréation du pod (SQ-13, ADR 0018).
             - name: data
               mountPath: /var/lib/rabbitmq
             - name: tmp
@@ -91,8 +112,8 @@ spec:
               readOnly: true
       volumes:
         - name: data
-          emptyDir:
-            sizeLimit: 256Mi
+          persistentVolumeClaim:
+            claimName: rabbitmq-data
         - name: tmp
           emptyDir:
             sizeLimit: 16Mi
