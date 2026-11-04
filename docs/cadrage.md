@@ -257,3 +257,6 @@ Namespace `sandbox`, supprimé après usage, jamais en même temps que `app` si 
 - WAF, Pod Security Admission strict.
 - Audit RGAA manuel (axe-core ne couvre qu'une partie des critères).
 - BFF, mTLS, signature d'images (cosign) et SBOM.
+- PostgreSQL en Deployment : deux pods possibles sur le même volume après `kubectl delete pod`, et `fsGroup` réappliqué
+  à toute la base à chaque montage → StatefulSet et `fsGroupChangePolicy: OnRootMismatch`, comme RabbitMQ (ADR 0018).
+- Historique de Prometheus en `emptyDir`, perdu à chaque recréation du pod → volume persistant (environ 200 Mo).
