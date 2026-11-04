@@ -1,0 +1,45 @@
+=== Santé rabbit des services (2026-11-04 17:58:45 UTC)
+troc-service : {"status":"UP"}
+notification-service : {"status":"UP"}
+
+OK : prometheus : 1 cible(s) UP
+OK : kubernetes-cadvisor : 1 cible(s) UP
+OK : kube-state-metrics : 1 cible(s) UP
+OK : troc-service : 1 cible(s) UP
+OK : notification-service : 1 cible(s) UP
+OK : keycloak : 1 cible(s) UP
+OK : rabbitmq : 1 cible(s) UP
+OK : rabbitmq-files : 1 cible(s) UP
+OK : tableau de bord sante provisionné
+OK : tableau de bord montee-en-charge provisionné
+OK : /actuator/prometheus depuis Internet : 200, aucune métrique
+OK : /api/troc/actuator/prometheus depuis Internet : 401, aucune métrique
+OK : /api/notifications/actuator/prometheus depuis Internet : 401, aucune métrique
+Écarts : 0
+
+=== Mesures (2026-11-04 17:58:49 UTC)
+NAME           CPU(cores)   CPU(%)   MEMORY(bytes)   MEMORY(%)   
+vps-c67c8a44   572m         28%      2919Mi          76%         
+NAME                                    CPU(cores)   MEMORY(bytes)   
+front-6c76476b58-gn929                  1m           4Mi             
+grafana-86546b6cf5-8l8mx                18m          260Mi           
+keycloak-79dd7fb7f6-q7ndq               6m           534Mi           
+kube-state-metrics-5fb5bdf78d-8z7qg     3m           17Mi            
+notification-service-674d8674df-clz84   23m          194Mi           
+postgresql-6cfff7f5c6-gqhlq             23m          69Mi            
+prometheus-5b845cf6c7-5tt8t             7m           75Mi            
+rabbitmq-0                              6m           82Mi            
+troc-service-6fbfcc5f-r8jvq             4m           218Mi           
+               total        used        free      shared  buff/cache   available
+Mem:            3819        3000         187          45         953         819
+Swap:           2047         103        1944
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1        38G   21G   18G  54% /
+
+Volume rabbitmq-data : 520K
+NAME                        READY   AGE   CONTAINERS   IMAGES
+statefulset.apps/rabbitmq   1/1     66m   rabbitmq     rabbitmq:4.4.0-management-alpine
+
+NAME                                    STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE    VOLUMEMODE
+persistentvolumeclaim/postgresql-data   Bound    pvc-10f6c38a-a61c-484a-8730-d21c84956027   2Gi        RWO            local-path     <unset>                 2d3h   Filesystem
+persistentvolumeclaim/rabbitmq-data     Bound    pvc-d0586dc3-2e83-4202-918b-08ce0482bc17   1Gi        RWO            local-path     <unset>                 66m    Filesystem
