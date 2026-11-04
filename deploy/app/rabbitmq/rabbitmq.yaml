@@ -58,11 +58,15 @@ spec:
       enableServiceLinks: false
       # UID 100 / GID 101 : utilisateur rabbitmq de l'image alpine ; rabbitmqctl tourne sous le même utilisateur
       # que le serveur et lit le même cookie Erlang (exp. 1, journal, étapes F et G).
+      # fsGroupChangePolicy OnRootMismatch : sur le PV local, Kubernetes applique fsGroup à chaque montage et rendait
+      # le cookie Erlang lisible par le groupe (RabbitMQ refuse alors de démarrer) ; il ne le fait plus que si le
+      # dossier racine n'a pas encore le groupe 101 (premier montage, volume vide) (SQ-13, ADR 0018).
       securityContext:
         runAsNonRoot: true
         runAsUser: 100
         runAsGroup: 101
         fsGroup: 101
+        fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
       containers:
