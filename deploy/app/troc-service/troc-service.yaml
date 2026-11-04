@@ -23,6 +23,8 @@ spec:
         prometheus.io/path: /actuator/prometheus
     spec:
       automountServiceAccountToken: false
+      # Pas de variables d'environnement injectées pour chaque Service de app (SQ-08).
+      enableServiceLinks: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532

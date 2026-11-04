@@ -61,6 +61,8 @@ spec:
         app: postgresql
     spec:
       automountServiceAccountToken: false
+      # Pas de variables d'environnement injectées pour chaque Service de app (SQ-08).
+      enableServiceLinks: false
       # UID/GID 70 : utilisateur postgres de l'image alpine.
       securityContext:
         runAsNonRoot: true
