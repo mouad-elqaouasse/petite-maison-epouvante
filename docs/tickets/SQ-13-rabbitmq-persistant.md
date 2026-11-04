@@ -54,6 +54,39 @@ Attendu avant le ticket : 0 message après redémarrage (écart). Attendu après
 - RAM du nœud et disque utilisé mesurés (`kubectl top`, `free -m`, `df -h`) et consignés ici.
 - ADR 0016 validée ; ADR 0010 et rapport exp. 2 annotés (renvoi vers l'ADR 0016).
 
+## Vérification (04/11/2026)
+
+Script : `deploy/scripts/rabbitmq-verifier-persistance.sh` (client pika `exp2-amqp:2`, label `app: troc-service` +
+`sonde`, comme les sondes de SQ-08). Résultats : `docs/soutenance/captures/sq-13/`. Décisions : ADR 0018 (PR 33 et 34).
+
+- **Test rouge** (`emptyDir`, `avant.txt`) : 10 messages avant `kubectl delete pod`, **0 après** ; nœud
+  `rabbit@rabbitmq-58bf97d678-…` différent à chaque pod.
+- **Test vert** (StatefulSet, `apres.txt`) : 10 messages avant, **10 après** ; nœud `rabbit@rabbitmq-0` ; comptes `troc` et
+  `notification` acceptés ; nouveau pod prêt en 24 s ; nettoyage : 10 messages lus et acquittés. DLQ vide.
+- **NetworkPolicies** (`matrice-apres-bascule.txt`) : matrice SQ-08, 0 écart ; label `app: rabbitmq` inchangé.
+- **Santé et observabilité** (`verifications.txt`) : santé `rabbit` UP dans les deux services ; 8 cibles Prometheus UP,
+  dont `rabbitmq` et `rabbitmq-files` ; 0 écart.
+- **Mesures** (17:58 UTC) : nœud 2919 Mio utilisés (76 %), 819 Mio disponibles ; `rabbitmq-0` 82 Mio ; disque 54 % ;
+  volume `rabbitmq-data` 520 Kio. RAM disponible jamais sous 819 Mio pendant le ticket.
+
+### Écarts au ticket
+
+- **ADR 0018** et non 0016 (numéro déjà pris par cAdvisor) ; **StatefulSet** plutôt que nom de nœud fixe : seul moyen
+  d'avoir au plus un pod sur le volume après `kubectl delete pod` (`local-path` ne fait respecter `ReadWriteOnce` que par
+  nœud). Test par `kubectl delete pod` et pas `rollout restart` (annulé par Flux, SQ-08).
+- **PVC protégés** : annotation `kustomize.toolkit.fluxcd.io/prune: disabled` sur `rabbitmq-data` et `postgresql-data`.
+- **Bascule faite par Flux** dès la fusion de la PR 33 (16:52:25 UTC), avant la suspension prévue : StatefulSet créé
+  environ 1 s avant la suppression du Deployment, au lieu de l'ordre inverse demandé. Les deux pods ont coexisté environ
+  25 s sans partager de données (ancien en `emptyDir`, file vide). Coupure AMQP : environ 24 s (16:52:26 → 16:52:50).
+  Leçon : suspendre Flux **avant** la fusion (fait pour la PR 34).
+- **Incident `fsGroup`** : l'hypothèse « `local-path` ignore `fsGroup` » était fausse. Le PV est de type `local` :
+  Kubernetes applique `fsGroup` à chaque montage et a rendu le cookie Erlang lisible par le groupe ; au premier
+  `kubectl delete pod` (16:58 UTC), RabbitMQ a refusé de démarrer (CrashLoopBackOff), `troc-service` n'était plus prêt.
+  Rétabli par `chmod 600` sur le cookie (17:05 UTC), pod prêt à 17:10:39 : **panne d'environ 12 min**. Les 10 messages
+  publiés avant la suppression étaient toujours là. Correctif durable (PR 34) : `fsGroupChangePolicy: OnRootMismatch`,
+  `fsGroup: 101` conservé ; appliqué à 17:54 (pod recréé sans erreur, prêt en 23 s, 10 messages toujours présents), puis
+  file vidée avant le test vert.
+
 ## Limites restantes
 
 - Mono-nœud : le volume `local-path` est sur le disque du VPS ; la perte du VPS reste une perte de messages.
