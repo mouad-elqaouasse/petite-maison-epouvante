@@ -1,0 +1,50 @@
+# SQ-08 — troc-service et notification-service → Keycloak 8080 : clés publiques (JWKS) lues par l'adresse interne
+# http://keycloak:8080/realms/epouvante/protocol/openid-connect/certs (ADR 0003). L'issuer public est seulement
+# comparé au jeton, jamais appelé : aucune sortie vers l'URL publique.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: services-keycloak-sortie
+  namespace: app
+  labels:
+    regle: services-keycloak
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: ["troc-service", "notification-service"]
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: keycloak
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: services-keycloak-entree
+  namespace: app
+  labels:
+    regle: services-keycloak
+spec:
+  podSelector:
+    matchLabels:
+      app: keycloak
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: ["troc-service", "notification-service"]
+      ports:
+        - protocol: TCP
+          port: 8080

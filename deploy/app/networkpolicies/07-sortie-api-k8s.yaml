@@ -1,0 +1,25 @@
+# SQ-08 — Prometheus (découverte des pods et des nœuds) et kube-state-metrics → API Kubernetes.
+# Seule l'adresse réelle de l'API K3s (IP du nœud, port 6443) : la règle s'applique après la traduction d'adresse du
+# Service kubernetes.default (10.43.0.1:443), une règle vers ce Service serait sans effet (exp. 1, B6).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sortie-api-k8s
+  namespace: app
+  labels:
+    regle: sortie-api-k8s
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: ["prometheus", "kube-state-metrics"]
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 51.178.39.218/32
+      ports:
+        - protocol: TCP
+          port: 6443

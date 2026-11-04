@@ -1,0 +1,144 @@
+# SQ-08 — Prometheus → ses cibles de collecte (deploy/app/prometheus/prometheus.yml) :
+#   troc-service et notification-service 8081 (port de gestion, ADR 0007), RabbitMQ 15692, Keycloak 9000,
+#   kube-state-metrics 8080, kubelet sur l'IP du nœud 10250 (cAdvisor, ADR 0016).
+# L'accès à l'API Kubernetes (découverte) est dans 07-sortie-api-k8s.yaml.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-cibles-sortie
+  namespace: app
+  labels:
+    regle: prometheus-cibles
+spec:
+  podSelector:
+    matchLabels:
+      app: prometheus
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: ["troc-service", "notification-service"]
+      ports:
+        - protocol: TCP
+          port: 8081
+    - to:
+        - podSelector:
+            matchLabels:
+              app: rabbitmq
+      ports:
+        - protocol: TCP
+          port: 15692
+    - to:
+        - podSelector:
+            matchLabels:
+              app: keycloak
+      ports:
+        - protocol: TCP
+          port: 9000
+    - to:
+        - podSelector:
+            matchLabels:
+              app: kube-state-metrics
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - ipBlock:
+            cidr: 51.178.39.218/32
+      ports:
+        - protocol: TCP
+          port: 10250
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-cibles-entree-gestion
+  namespace: app
+  labels:
+    regle: prometheus-cibles
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: ["troc-service", "notification-service"]
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 8081
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-cibles-entree-rabbitmq
+  namespace: app
+  labels:
+    regle: prometheus-cibles
+spec:
+  podSelector:
+    matchLabels:
+      app: rabbitmq
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 15692
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-cibles-entree-keycloak
+  namespace: app
+  labels:
+    regle: prometheus-cibles
+spec:
+  podSelector:
+    matchLabels:
+      app: keycloak
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 9000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-cibles-entree-kube-state-metrics
+  namespace: app
+  labels:
+    regle: prometheus-cibles
+spec:
+  podSelector:
+    matchLabels:
+      app: kube-state-metrics
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 8080

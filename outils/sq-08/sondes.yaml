@@ -1,0 +1,65 @@
+# SQ-08 — pods « sondes » de la matrice de flux (tester-flux.sh) : busybox avec le label app d'un composant, donc
+# soumis aux mêmes NetworkPolicies que lui. Nécessaires parce que les images des services (distroless) n'ont ni shell
+# ni nc. Chaque test ouvre une connexion neuve (les connexions déjà établies survivent aux règles, exp. 1, B2).
+# Sonde de disponibilité toujours en échec : aucune sonde n'entre dans les endpoints du Service de son composant.
+# sonde-front joue l'intrus (aucun flux sortant autorisé hormis le DNS) ; sonde-default, un intrus d'un autre namespace.
+# Créées pour la durée de SQ-08, puis supprimées : kubectl delete -f outils/sq-08/sondes.yaml
+apiVersion: v1
+kind: List
+items:
+  - apiVersion: v1
+    kind: Pod
+    metadata: {name: sonde-front, namespace: app, labels: {app: front, sonde: "true"}}
+    spec: &spec
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 0
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: sonde
+          image: busybox:1.37.0
+          imagePullPolicy: IfNotPresent
+          command: ["sleep", "86400"]
+          resources:
+            requests: {cpu: 5m, memory: 4Mi}
+            limits: {cpu: 100m, memory: 16Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          readinessProbe:
+            exec: {command: ["false"]}
+            periodSeconds: 60
+  - apiVersion: v1
+    kind: Pod
+    metadata: {name: sonde-troc, namespace: app, labels: {app: troc-service, sonde: "true"}}
+    spec: *spec
+  - apiVersion: v1
+    kind: Pod
+    metadata: {name: sonde-notification, namespace: app, labels: {app: notification-service, sonde: "true"}}
+    spec: *spec
+  - apiVersion: v1
+    kind: Pod
+    metadata: {name: sonde-keycloak, namespace: app, labels: {app: keycloak, sonde: "true"}}
+    spec: *spec
+  - apiVersion: v1
+    kind: Pod
+    metadata: {name: sonde-prometheus, namespace: app, labels: {app: prometheus, sonde: "true"}}
+    spec: *spec
+  - apiVersion: v1
+    kind: Pod
+    metadata: {name: sonde-ksm, namespace: app, labels: {app: kube-state-metrics, sonde: "true"}}
+    spec: *spec
+  - apiVersion: v1
+    kind: Pod
+    metadata: {name: sonde-grafana, namespace: app, labels: {app: grafana, sonde: "true"}}
+    spec: *spec
+  - apiVersion: v1
+    kind: Pod
+    metadata: {name: sonde-default, namespace: default, labels: {app: sonde-default, sonde: "true"}}
+    spec: *spec
