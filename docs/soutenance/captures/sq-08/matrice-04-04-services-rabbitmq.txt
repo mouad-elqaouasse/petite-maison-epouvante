@@ -1,0 +1,38 @@
+=== Matrice SQ-08 — étape : 04 (04-services-rabbitmq.yaml) — 2026-11-04 13:25:36 UTC
+=== 8 NetworkPolicies ; règles : refus-total services-postgresql services-rabbitmq sortie-dns traefik-entree  
+[OK   ] strict   front (intrus) -> DNS                                attendu PASSE  obtenu PASSE
+[OK   ] strict   troc-service -> postgresql:5432                      attendu PASSE  obtenu PASSE
+[OK   ] strict   troc-service -> rabbitmq:5672                        attendu PASSE  obtenu PASSE
+[OK   ] strict   troc-service -> keycloak:8080 (JWKS)                 attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   notification -> postgresql:5432                      attendu PASSE  obtenu PASSE
+[OK   ] strict   notification -> rabbitmq:5672                        attendu PASSE  obtenu PASSE
+[OK   ] strict   notification -> keycloak:8080 (JWKS)                 attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   keycloak -> postgresql:5432                          attendu PASSE  obtenu PASSE
+[OK   ] strict   prometheus -> troc-service:8081                      attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   prometheus -> notification-service:8081              attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   prometheus -> rabbitmq:15692                         attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   prometheus -> keycloak:9000                          attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   prometheus -> kube-state-metrics:8080                attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   prometheus -> kubelet 51.178.39.218:10250            attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   prometheus -> API 51.178.39.218:6443                 attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   kube-state-metrics -> API 51.178.39.218:6443         attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   grafana -> prometheus:9090                           attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   front (intrus) -> postgresql:5432                    attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   front (intrus) -> rabbitmq:5672                      attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   front (intrus) -> keycloak:8080                      attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   front (intrus) -> troc-service:8081                  attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   front (intrus) -> prometheus:9090                    attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   front (intrus) -> Internet                           attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   troc-service -> Internet (avant US1)                 attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   grafana -> Internet                                  attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   keycloak -> rabbitmq:5672                            attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   prometheus -> postgresql:5432                        attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   default (intrus) -> postgresql:5432                  attendu BLOQUE obtenu BLOQUE
+[OK   ] strict   default (intrus) -> keycloak:8080                    attendu BLOQUE obtenu BLOQUE
+[OK   ] sensible HTTPS public : page d'accueil                        attendu PASSE  obtenu PASSE
+[OK   ] sensible HTTPS public : /api/troc/version                     attendu PASSE  obtenu PASSE
+[OK   ] sensible HTTPS public : /api/notifications/version            attendu PASSE  obtenu PASSE
+[OK   ] sensible HTTPS public : découverte OIDC auth.                attendu PASSE  obtenu PASSE
+[INFO ] sensible Prometheus : toutes les cibles up                    attendu BLOQUE obtenu BLOQUE
+[INFO ] sensible Pods de app prêts (hors sondes)                     attendu BLOQUE obtenu PASSE
+=== Écarts : 0

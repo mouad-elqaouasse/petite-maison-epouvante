@@ -45,6 +45,12 @@ après le refus total. Aucune sortie vers Internet pour Grafana (plugins préins
 Pas de sortie vers Internet dans cette phase : la règle `troc-service` → 443 hors cluster arrive avec US1b (Cloudinary).
 Les règles de `flux-system` (exp. 3) restent inchangées.
 
+> **Note pour US1 (ajoutée le 04/11/2026)** : l'envoi des photos vers Cloudinary demandera une règle de sortie pour
+> `troc-service` (443 hors cluster, plus le DNS déjà ouvert). Sans elle, le refus par défaut bloque l'appel : la matrice
+> le vérifie aujourd'hui (`troc-service -> Internet (avant US1)` : bloqué). Règle à ajouter dans
+> `deploy/app/networkpolicies/` avec la user story, et test correspondant à passer à « autorisé » dans
+> `outils/sq-08/tester-flux.sh`.
+
 - Script de matrice de flux (adapté de `exp1/98`) : attendu comparé à l'obtenu, avec un pod « intrus ».
 
 ## Critères d'acceptation
@@ -53,3 +59,38 @@ Les règles de `flux-system` (exp. 3) restent inchangées.
 - Après `kubectl rollout restart` de tous les Deployments de `app` : page en ligne, connexion, `/moi`, cibles Prometheus UP.
 - Le pod intrus ne joint ni PostgreSQL, ni RabbitMQ, ni Keycloak.
 - Renouvellement Let's Encrypt non gêné (HTTP-01 passe par Traefik et cert-manager, hors de `app` : à vérifier).
+
+## Vérification (04/11/2026)
+
+Outils : `outils/sq-08/` (matrice `tester-flux.sh` sur des pods « sondes » busybox portant le label de chaque
+composant, car les images des services n'ont ni shell ni `nc` ; pod intrus `intrus.sh`). Résultats :
+`docs/soutenance/captures/sq-08/`. Décisions : ADR 0017.
+
+- **Durcissement des pods** (PR à part, fusionnée avant les règles) : `enableServiceLinks: false` sur les 9 Deployments,
+  ServiceAccount `default` sans jeton. Appliqué Deployment par Deployment, Flux suspendu (RAM jamais sous 693 Mio),
+  puis Flux relancé sans aucun pod recréé.
+- **Chemin des clés de Keycloak** : adresse interne `http://keycloak:8080/.../certs` dans les deux services (issuer
+  public seulement comparé) : la règle `services-keycloak` vise Keycloak:8080.
+- **Matrice** de 35 tests (29 stricts, 6 sur le chemin réel) : référence sans règle, 0 écart ; puis 0 écart après chacune
+  des 8 étapes (18 NetworkPolicies, 9 règles). Écart au ticket : pas de règle vers le Service 443 de l'API (sans effet,
+  exp. 1, B6) ; ajout du solveur ACME (8089) dans `traefik-entree`.
+- **Redémarrage** de chaque pod par `kubectl delete pod` (pas `rollout restart`, annulé par Flux), Keycloak en premier,
+  matrice après chacun : 0 écart, RAM jamais sous 835 Mio. Tunnels Grafana et Prometheus : 200. Connexion PKCE et `/moi`
+  vérifiées par le Lead Developer. 8 cibles Prometheus UP.
+- **Pod intrus** (label du front) : avant, il joint PostgreSQL, RabbitMQ, Keycloak, `troc-service:8081`, Prometheus et
+  Internet, reçoit un jeton et ≈ 100 variables de Services ; après, seul le DNS répond, aucun jeton, seules les variables
+  `KUBERNETES_*` restent (injectées par le kubelet quel que soit `enableServiceLinks`).
+- Renouvellement Let's Encrypt : règle `traefik-entree-solveur-acme` en place ; non observé (premier renouvellement
+  le 2026-12-27).
+
+### Coupure pendant la mise en place
+
+- Le site public (`epouvante.` et `auth.`) a été **coupé environ 1 minute** (13:22 à 13:23 UTC) : entre l'étape 1
+  (`refus-total` et `sortie-dns`) et l'étape 2 (`traefik-entree`), toute nouvelle connexion de Traefik vers les pods
+  était refusée. Coupure voulue : le critère d'acceptation impose une matrice après chaque règle, à partir du refus total.
+  Les services internes ont tenu grâce aux connexions déjà ouvertes (exp. 1, B2), puis aux règles suivantes.
+- **En production**, on éviterait la coupure en inversant l'ordre : **règles d'autorisation d'abord, refus total en
+  dernier**. Une règle qui sélectionne un pod l'isole déjà dans le sens qu'elle déclare, donc chaque pod doit recevoir
+  toutes ses règles (entrée et sortie, DNS compris) dans le même `kubectl apply` ; quand tous les flux sont couverts,
+  le refus total ne change plus rien aux flux légitimes et ne bloque que le reste. Le tout est validé d'abord sur un
+  environnement de préproduction avec la même matrice, et la règle de Traefik n'est jamais absente.

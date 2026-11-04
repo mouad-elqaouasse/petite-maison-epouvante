@@ -1,0 +1,78 @@
+# SQ-08 — pod intrus-front (label app: front), phase : apres
+# Date (UTC) : 2026-11-04 13:55:15
+# enableServiceLinks du pod : false
+# NetworkPolicies de app :
+#   NAME                                          POD-SELECTOR                                                AGE
+#   grafana-prometheus-entree                     app=prometheus                                              25m
+#   grafana-prometheus-sortie                     app=grafana                                                 25m
+#   prometheus-cibles-entree-gestion              app in (notification-service,troc-service)                  27m
+#   prometheus-cibles-entree-keycloak             app=keycloak                                                27m
+#   prometheus-cibles-entree-kube-state-metrics   app=kube-state-metrics                                      27m
+#   prometheus-cibles-entree-rabbitmq             app=rabbitmq                                                27m
+#   prometheus-cibles-sortie                      app=prometheus                                              27m
+#   refus-total                                   <none>                                                      33m
+#   services-keycloak-entree                      app=keycloak                                                28m
+#   services-keycloak-sortie                      app in (notification-service,troc-service)                  28m
+#   services-postgresql-entree                    app=postgresql                                              31m
+#   services-postgresql-sortie                    app in (keycloak,notification-service,troc-service)         31m
+#   services-rabbitmq-entree                      app=rabbitmq                                                29m
+#   services-rabbitmq-sortie                      app in (notification-service,troc-service)                  29m
+#   sortie-api-k8s                                app in (kube-state-metrics,prometheus)                      26m
+#   sortie-dns                                    <none>                                                      33m
+#   traefik-entree                                app in (front,keycloak,notification-service,troc-service)   32m
+#   traefik-entree-solveur-acme                   acme.cert-manager.io/http01-solver=true                     32m
+
+$ id
+uid=101 gid=101 groups=101
+-> code 0
+
+$ env
+KUBERNETES_SERVICE_PORT=443
+KUBERNETES_PORT=tcp://10.43.0.1:443
+HOSTNAME=intrus-front
+SHLVL=1
+HOME=/
+KUBERNETES_PORT_443_TCP_ADDR=10.43.0.1
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+KUBERNETES_PORT_443_TCP_PORT=443
+KUBERNETES_PORT_443_TCP_PROTO=tcp
+KUBERNETES_SERVICE_PORT_HTTPS=443
+KUBERNETES_PORT_443_TCP=tcp://10.43.0.1:443
+KUBERNETES_SERVICE_HOST=10.43.0.1
+PWD=/
+-> code 0
+
+$ ls /var/run/secrets/kubernetes.io/serviceaccount
+ls: /var/run/secrets/kubernetes.io/serviceaccount: No such file or directory
+-> code 1
+
+$ nslookup postgresql.app.svc.cluster.local
+Server:		10.43.0.10
+Address:	10.43.0.10:53
+
+Name:	postgresql.app.svc.cluster.local
+Address: 10.43.103.66
+
+
+-> code 0
+
+$ nc -zv -w 3 postgresql 5432
+-> code 1
+
+$ nc -zv -w 3 rabbitmq 5672
+-> code 1
+
+$ nc -zv -w 3 keycloak 8080
+-> code 1
+
+$ nc -zv -w 3 troc-service 8081
+-> code 1
+
+$ nc -zv -w 3 prometheus 9090
+-> code 1
+
+$ wget -T 3 -O /dev/null http://example.com
+Connecting to example.com (104.20.23.154:80)
+wget: can't connect to remote host (104.20.23.154): Connection refused
+-> code 1
+
