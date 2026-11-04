@@ -33,6 +33,8 @@ spec:
         app: rabbitmq
     spec:
       automountServiceAccountToken: false
+      # Pas de variables d'environnement injectées pour chaque Service de app (SQ-08).
+      enableServiceLinks: false
       # UID 100 / GID 101 : utilisateur rabbitmq de l'image alpine ; rabbitmqctl tourne sous le même utilisateur
       # que le serveur et lit le même cookie Erlang (exp. 1, journal, étapes F et G).
       securityContext:
