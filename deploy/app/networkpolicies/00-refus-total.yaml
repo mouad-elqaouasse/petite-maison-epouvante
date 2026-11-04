@@ -1,0 +1,15 @@
+# SQ-08 — refus par défaut (ADR 0004) : tout le trafic entrant et sortant des pods de app est refusé ; chaque flux
+# nécessaire est ouvert par les fichiers suivants. Les sondes du kubelet passent (trafic venant du nœud, exp. 1, B2).
+# Label regle : nom de la règle, lu par outils/sq-08/tester-flux.sh pour calculer l'attendu.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: refus-total
+  namespace: app
+  labels:
+    regle: refus-total
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress

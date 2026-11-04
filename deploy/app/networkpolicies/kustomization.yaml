@@ -1,0 +1,14 @@
+# NetworkPolicies de app (SQ-08, ADR 0004) : refus par défaut, puis une règle par fichier.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: app
+resources:
+  - 00-refus-total.yaml
+  - 01-sortie-dns.yaml
+  - 02-traefik-entree.yaml
+  - 03-services-postgresql.yaml
+  - 04-services-rabbitmq.yaml
+  - 05-services-keycloak.yaml
+  - 06-prometheus-cibles.yaml
+  - 07-sortie-api-k8s.yaml
+  - 08-grafana-prometheus.yaml

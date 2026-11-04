@@ -1,0 +1,48 @@
+# SQ-08 — troc-service et notification-service → RabbitMQ 5672 (AMQP).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: services-rabbitmq-sortie
+  namespace: app
+  labels:
+    regle: services-rabbitmq
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: ["troc-service", "notification-service"]
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: rabbitmq
+      ports:
+        - protocol: TCP
+          port: 5672
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: services-rabbitmq-entree
+  namespace: app
+  labels:
+    regle: services-rabbitmq
+spec:
+  podSelector:
+    matchLabels:
+      app: rabbitmq
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: ["troc-service", "notification-service"]
+      ports:
+        - protocol: TCP
+          port: 5672

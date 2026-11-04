@@ -1,0 +1,48 @@
+# SQ-08 — troc-service, notification-service et Keycloak → PostgreSQL 5432 (sortie des clients, entrée du serveur).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: services-postgresql-sortie
+  namespace: app
+  labels:
+    regle: services-postgresql
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: ["troc-service", "notification-service", "keycloak"]
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgresql
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: services-postgresql-entree
+  namespace: app
+  labels:
+    regle: services-postgresql
+spec:
+  podSelector:
+    matchLabels:
+      app: postgresql
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: ["troc-service", "notification-service", "keycloak"]
+      ports:
+        - protocol: TCP
+          port: 5432

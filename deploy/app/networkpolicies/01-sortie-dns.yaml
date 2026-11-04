@@ -1,0 +1,26 @@
+# SQ-08 — résolution de noms pour tous les pods de app, vers les pods CoreDNS de kube-system.
+# Destination : les pods, pas le Service kube-dns (la règle s'applique après la traduction d'adresse, exp. 1, B3).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sortie-dns
+  namespace: app
+  labels:
+    regle: sortie-dns
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

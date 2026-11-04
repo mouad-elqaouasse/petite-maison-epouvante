@@ -14,3 +14,4 @@ resources:
   - prometheus
   - kube-state-metrics
   - grafana
+  - networkpolicies
