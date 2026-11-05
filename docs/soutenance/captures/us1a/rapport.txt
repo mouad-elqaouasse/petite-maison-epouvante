@@ -1,0 +1,13 @@
+1280 liste vide : 0 violation(s), dont 0 grave(s)
+1280 formulaire : 0 violation(s), dont 0 grave(s)
+1280 formulaire avec erreurs : 0 violation(s), dont 0 grave(s)
+focus après envoi invalide : #titre
+1280 liste après publication : 0 violation(s), dont 0 grave(s)
+1280 liste en erreur : 0 violation(s), dont 0 grave(s)
+375 liste : 0 violation(s), dont 0 grave(s)
+375 px, défilement horizontal : false
+375 formulaire : 0 violation(s), dont 0 grave(s)
+375 formulaire avec erreurs : 0 violation(s), dont 0 grave(s)
+375 px formulaire, défilement horizontal : false
+erreurs console : 1
+1280px Failed to load resource: the server responded with a status of 503 (Service Unavailable)

@@ -79,7 +79,13 @@ verifier strict "front (intrus) -> keycloak:8080"            "jamais"           
 verifier strict "front (intrus) -> troc-service:8081"        "jamais"                             "${K[@]}" sonde-front -- nc -z -w 3 troc-service 8081
 verifier strict "front (intrus) -> prometheus:9090"          "jamais"                             "${K[@]}" sonde-front -- nc -z -w 3 prometheus 9090
 verifier strict "front (intrus) -> Internet"                 "jamais"                             "${K[@]}" sonde-front -- wget -q -T 3 -O /dev/null http://example.com
-verifier strict "troc-service -> Internet (avant US1)"       "jamais"                             "${K[@]}" sonde-troc -- wget -q -T 3 -O /dev/null http://example.com
+# US1a : troc-service → Cloudinary en 443 seulement (troc-sortie-https) ; ni HTTP, ni le nœud, ni les autres pods.
+verifier strict "troc-service -> api.cloudinary.com:443"     "sortie-dns troc-sortie-https"       "${K[@]}" sonde-troc -- nc -z -w 3 api.cloudinary.com 443
+verifier strict "troc-service -> Internet en HTTP (80)"      "jamais"                             "${K[@]}" sonde-troc -- wget -q -T 3 -O /dev/null http://example.com
+verifier strict "troc-service -> nœud $NOEUD:443"           "jamais"                             "${K[@]}" sonde-troc -- nc -z -w 3 "$NOEUD" 443
+verifier strict "troc-service -> notification-service:8081" "jamais"                             "${K[@]}" sonde-troc -- nc -z -w 3 notification-service 8081
+verifier strict "notification -> api.cloudinary.com:443"     "jamais"                             "${K[@]}" sonde-notification -- nc -z -w 3 api.cloudinary.com 443
+verifier strict "front (intrus) -> api.cloudinary.com:443"   "jamais"                             "${K[@]}" sonde-front -- nc -z -w 3 api.cloudinary.com 443
 verifier strict "grafana -> Internet"                        "jamais"                             "${K[@]}" sonde-grafana -- wget -q -T 3 -O /dev/null http://example.com
 verifier strict "keycloak -> rabbitmq:5672"                  "jamais"                             "${K[@]}" sonde-keycloak -- nc -z -w 3 rabbitmq 5672
 verifier strict "prometheus -> postgresql:5432"              "jamais"                             "${K[@]}" sonde-prometheus -- nc -z -w 3 postgresql 5432

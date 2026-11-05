@@ -1,0 +1,58 @@
+<main class="page page-large">
+  <section class="annonces" aria-labelledby="titre-annonces">
+    <div class="annonces-tete">
+      <h1 id="titre-annonces" class="titre-ecran">Annonces</h1>
+      <a class="bouton-principal" routerLink="/annonces/nouvelle">Publier une annonce</a>
+    </div>
+
+    <p class="confirmation" aria-live="polite">
+      @if (publiee) {
+        Annonce publiée
+      }
+    </p>
+
+    @let liste = etat();
+    @switch (liste.etat) {
+      @case ('chargement') {
+        <p class="aide" role="status">Chargement des annonces…</p>
+      }
+      @case ('erreur') {
+        <p class="erreur" role="alert">Les annonces n’ont pas pu être chargées. Vérifiez votre connexion, puis réessayez.</p>
+        <button type="button" class="bouton-secondaire" (click)="charger()">Réessayer</button>
+      }
+      @case ('chargee') {
+        @if (liste.annonces.length === 0) {
+          <div class="annonces-vide">
+            <p>Aucune annonce pour l’instant.</p>
+            <p class="aide">Une figurine, une affiche, un film en double ? Proposez-la la première.</p>
+          </div>
+        } @else {
+          <ul class="annonces-grille">
+            @for (annonce of liste.annonces; track annonce.id) {
+              <li>
+                <article class="carte">
+                  <img class="carte-photo" [src]="annonce.photoUrl" [alt]="annonce.titre" loading="lazy" />
+                  <h2 class="carte-titre">{{ annonce.titre }}</h2>
+                  <dl class="carte-generique">
+                    <div>
+                      <dt>Catégorie</dt>
+                      <dd>{{ annonce.categorie }}</dd>
+                    </div>
+                    <div>
+                      <dt>Type</dt>
+                      <dd>{{ type(annonce.type) }}</dd>
+                    </div>
+                    <div>
+                      <dt>Publiée le</dt>
+                      <dd><time [attr.datetime]="annonce.creeLe">{{ date(annonce.creeLe) }}</time></dd>
+                    </div>
+                  </dl>
+                </article>
+              </li>
+            }
+          </ul>
+        }
+      }
+    }
+  </section>
+</main>

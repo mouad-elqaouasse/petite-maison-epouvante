@@ -1,0 +1,128 @@
+<main class="page">
+  <section class="publier" aria-labelledby="titre-publier">
+    <h1 id="titre-publier" class="titre-ecran">Publier une annonce</h1>
+    <p class="aide">Tous les champs sont obligatoires, sauf la description.</p>
+
+    <form class="formulaire" [formGroup]="formulaire" (ngSubmit)="publier()" novalidate>
+      @let erreurTitre = erreur('titre');
+      <div class="champ">
+        <label for="titre">Titre</label>
+        <input
+          id="titre"
+          type="text"
+          formControlName="titre"
+          maxlength="80"
+          autocomplete="off"
+          [attr.aria-invalid]="erreurTitre ? 'true' : null"
+          [attr.aria-describedby]="erreurTitre ? 'aide-titre erreur-titre' : 'aide-titre'"
+        />
+        <p id="aide-titre" class="champ-aide">Entre 3 et 80 caractères.</p>
+        @if (erreurTitre) {
+          <p id="erreur-titre" class="champ-erreur">{{ erreurTitre }}</p>
+        }
+      </div>
+
+      @let erreurDescription = erreur('description');
+      <div class="champ">
+        <label for="description">Description <span class="facultatif">(facultative)</span></label>
+        <textarea
+          id="description"
+          formControlName="description"
+          rows="5"
+          [attr.maxlength]="descriptionMax"
+          [attr.aria-invalid]="erreurDescription ? 'true' : null"
+          [attr.aria-describedby]="erreurDescription ? 'aide-description erreur-description' : 'aide-description'"
+        ></textarea>
+        <p id="aide-description" class="champ-aide">
+          {{ formulaire.controls.description.value.length }} sur {{ descriptionMax }} caractères.
+        </p>
+        @if (erreurDescription) {
+          <p id="erreur-description" class="champ-erreur">{{ erreurDescription }}</p>
+        }
+      </div>
+
+      @let erreurCategorie = erreur('categorie');
+      @let listeCategories = categories();
+      <div class="champ">
+        <label for="categorie">Catégorie</label>
+        <select
+          id="categorie"
+          formControlName="categorie"
+          [attr.aria-invalid]="erreurCategorie ? 'true' : null"
+          [attr.aria-describedby]="erreurCategorie ? 'erreur-categorie' : null"
+        >
+          <option value="">
+            {{ listeCategories.etat === 'chargement' ? 'Chargement des catégories…' : 'Choisir une catégorie' }}
+          </option>
+          @if (listeCategories.etat === 'chargees') {
+            @for (categorie of listeCategories.categories; track categorie) {
+              <option [value]="categorie">{{ categorie }}</option>
+            }
+          }
+        </select>
+        @if (listeCategories.etat === 'erreur') {
+          <div class="champ-indisponible">
+            <p class="erreur" role="alert">La liste des catégories n’a pas pu être chargée.</p>
+            <button type="button" class="bouton-secondaire" (click)="chargerCategories()">Réessayer</button>
+          </div>
+        }
+        @if (erreurCategorie) {
+          <p id="erreur-categorie" class="champ-erreur">{{ erreurCategorie }}</p>
+        }
+      </div>
+
+      @let erreurType = erreur('type');
+      <fieldset class="champ champ-type">
+        <legend>Type d’annonce</legend>
+        <div class="choix">
+          @for (option of [{ valeur: 'ECHANGE', libelle: 'Échange' }, { valeur: 'DON', libelle: 'Don' }]; track option.valeur) {
+            <span class="choix-option">
+              <input
+                type="radio"
+                [id]="'type-' + option.valeur"
+                formControlName="type"
+                [value]="option.valeur"
+                [attr.aria-invalid]="erreurType ? 'true' : null"
+                [attr.aria-describedby]="erreurType ? 'erreur-type' : null"
+              />
+              <label [for]="'type-' + option.valeur">{{ option.libelle }}</label>
+            </span>
+          }
+        </div>
+        @if (erreurType) {
+          <p id="erreur-type" class="champ-erreur">{{ erreurType }}</p>
+        }
+      </fieldset>
+
+      @let erreurPhoto = erreur('photo');
+      @let fichier = photo();
+      <div class="champ">
+        <label for="photo">Photo de l’objet</label>
+        <input
+          id="photo"
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          (change)="choisirPhoto($event)"
+          [attr.aria-invalid]="erreurPhoto ? 'true' : null"
+          [attr.aria-describedby]="erreurPhoto ? 'aide-photo erreur-photo' : 'aide-photo'"
+        />
+        <p id="aide-photo" class="champ-aide">
+          @if (fichier) {
+            {{ fichier.name }}, {{ tailleLisible(fichier.size) }}.
+          } @else {
+            Une photo, JPEG, PNG ou WebP, 2 Mo au plus.
+          }
+        </p>
+        @if (erreurPhoto) {
+          <p id="erreur-photo" class="champ-erreur">{{ erreurPhoto }}</p>
+        }
+      </div>
+
+      <p class="erreur formulaire-erreur" role="alert">{{ erreurGlobale() }}</p>
+
+      <button type="submit" class="bouton-principal" [disabled]="envoi()">
+        {{ envoi() ? 'Publication…' : 'Publier l’annonce' }}
+      </button>
+    </form>
+  </section>
+</main>

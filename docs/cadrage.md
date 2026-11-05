@@ -58,7 +58,7 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
 
    Les indicateurs 1, 2, 5 empêchent la dette d'entrer dans `main` ; 3 et 4 sont suivis dans le temps pour détecter les dérives.
    Indicateur 3 : un upload vers le vrai Cloudinary prend ≈ 1,5 s depuis le VPS (expérience 4, mesure unique) ; le seuil
-   de 500 ms vaut pour les campagnes en `StockagePhoto=jetable`, la campagne avec le vrai Cloudinary mesure la dépendance.
+   de 500 ms vaut pour les campagnes en profil `photo-factice` (ADR 0021), la campagne avec le vrai Cloudinary mesure la dépendance.
 12. **Tests** :
     - unitaires (JUnit 5) ;
     - intégration (Testcontainers : PostgreSQL, RabbitMQ, Keycloak avec realm de test ; WireMock pour l'adaptateur Cloudinary) ;
@@ -66,7 +66,7 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
       utilisent une fausse implémentation de `StockagePhoto` ; l'adaptateur Cloudinary est testé seul contre une API simulée
       par WireMock (succès, erreur, timeout) ; **aucun appel au vrai Cloudinary en CI**. Réponses à simuler, relevées à
       l'expérience 4 : 401 « Invalid Signature », 401 « Invalid api_key », 400 « File size too large » ; timeouts de
-      connexion et de lecture fixés dans l'adaptateur (valeurs à proposer avec US1b). Seule exception, hors CI : la courte
+      connexion et de lecture fixés dans l'adaptateur (2 s et 10 s, ADR 0021). Seule exception, hors CI : la courte
       campagne de charge avec le vrai Cloudinary sur le VPS (point 17) ;
     - **acceptation par l'API = la base** : boîte noire, JUnit 5 + RestAssured + Awaitility, `StockagePhoto` simulé.
       Critères en Gherkin dans `docs/backlog/`, un test JUnit par scénario (même nom), sans Cucumber ;
@@ -124,7 +124,7 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
       cAdvisor (retard de 5 min à la descente, expérience 1, partie 5).
 17. **Montée en charge et disponibilité** [P3] :
     - JMeter, utilisateurs authentifiés, ~80 % `GET /annonces`, ~20 % `POST /annonces` avec une photo de test ~200 Ko ;
-    - pendant les campagnes : `StockagePhoto=jetable` (valide, ne garde rien, renvoie une fausse URL), désactivé par défaut et vérifié par un test ;
+    - pendant les campagnes : profil `photo-factice` (valide, ne garde rien, renvoie une fausse URL), désactivé par défaut et vérifié par un test (ADR 0021) ;
       plus une courte campagne avec le vrai Cloudinary pour mesurer la dépendance ;
     - HPA sur le CPU : `troc-service` 1→3 replicas, `notification-service` fixé à 1 replica (budget RAM, `docs/adr/0005-budget-ram-et-hpa.md`) ;
     - paramètres du HPA (décision du 29/10/2026) : `autoscaling/v2`, cible 50 % du CPU demandé, fenêtres de stabilisation par défaut
@@ -167,14 +167,14 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
 
 | # | User story | Service | Critères d'acceptation principaux |
 |---|---|---|---|
-| US1a | En tant que membre, je publie une annonce de troc avec sa photo (de bout en bout, `StockagePhoto` en mémoire) | troc | 201 si valide ; 400 si invalide ; **400 sans photo** ; photo > 2 Mo ou format non autorisé → 400 ; 401 sans jeton ; auteur tiré du JWT ; annonce visible dans la liste |
-| US1b | Branchement de Cloudinary derrière `StockagePhoto` | troc | photo stockée, `publicId`/URL enregistrés (`public_id` renvoyé par Cloudinary) ; suppression si l'enregistrement échoue (`destroy`, `invalidate=true`) ; clé lue depuis le secret ; identifiants refusés (401 de Cloudinary) → 500, message de Cloudinary ni renvoyé ni journalisé |
+| US1a | En tant que membre, je publie une annonce de troc avec sa photo, stockée sur Cloudinary (de bout en bout ; périmètre élargi le 05/11/2026, ancienne US1b fusionnée) | troc | 201 si valide ; 400 si invalide ; **400 sans photo** ; photo > 2 Mo ou format non autorisé → 400, jamais envoyée à Cloudinary ; 401 sans jeton ; auteur tiré du JWT ; annonce visible dans la liste ; `public_id`/URL de Cloudinary enregistrés ; suppression si l'enregistrement échoue (`destroy`, `invalidate=true`) ; erreur ou lenteur de Cloudinary → 502, message de Cloudinary ni renvoyé ni journalisé |
+| US1b | ~~Branchement de Cloudinary derrière `StockagePhoto`~~ **fusionnée dans US1a le 05/11/2026** | troc | voir US1a |
 | US2 | En tant que membre, je gère mes catégories d'intérêt | notification | ajout/retrait ; catégorie inconnue → 400 |
 | US3 | En tant que membre, je suis notifié d'une nouvelle annonce | notification | auteur → `CONFIRMATION` ; abonné → `ALERTE` ; non-abonné → rien ; auteur abonné → seulement `CONFIRMATION` ; message en double → une seule notification ; message en échec → DLQ après 4 livraisons (Testcontainers, RabbitMQ ≥ 4.3) |
 | US4 | En tant que membre, je consulte mes notifications et les marque comme lues | notification | je ne vois que les miennes ; marquer celle d'un autre → 404 |
 | US5 | En tant que modérateur, je retire une annonce | troc | modérateur → `RETIREE`, invisible ; `USER` → 403 |
 
-Ordre : US1a → US2 → US3 (tranche « publier → notifier » démontrable), puis US4, US5, US1b.
+Ordre : US1a → US2 → US3 (tranche « publier → notifier » démontrable), puis US4, US5 (US1b fusionnée dans US1a le 05/11/2026).
 
 ## 3. Expérimentations en bac à sable [E1]
 Une journée maximum chacune ; au-delà, on documente la difficulté et on avance. Un rapport par expérience dans `docs/experimentations/`.
@@ -219,7 +219,7 @@ Namespace `sandbox`, supprimé après usage, jamais en même temps que `app` si 
 
 **Should** (attendu, mais un repli existe)
 - US4, US5
-- US1b (Cloudinary) — repli : `StockagePhoto` en mémoire, limite documentée
+- ~~US1b (Cloudinary)~~ : fusionnée dans US1a (Must) le 05/11/2026, plus de repli en mémoire en production
 - E2E Playwright + axe-core dans Compose
 - OWASP ZAP baseline, Dependabot
 - NetworkPolicies, en-têtes de sécurité, pare-feu VPS (pare-feu et SSH par clé à faire dès l'installation)
@@ -230,7 +230,7 @@ Namespace `sandbox`, supprimé après usage, jamais en même temps que `app` si 
 - Comparaison NATS (expérience 2 partielle)
 - Expérience 4 (Cloudinary depuis un pod) et campagne de charge avec le vrai Cloudinary
 - Rate limiting Traefik
-- Mode `StockagePhoto=jetable` (sinon, campagne de charge à faible volume)
+- ~~Mode `StockagePhoto=jetable`~~ : réalisé avec US1a (profil `photo-factice`, ADR 0021)
 
 **Won't (V1)** : voir §6 hors périmètre.
 
@@ -249,7 +249,7 @@ Namespace `sandbox`, supprimé après usage, jamais en même temps que `app` si 
 - ~~Budget RAM réel et éventuel plan B : expérience 1.~~ Tranché le 29/10/2026 (§1.4.18, `docs/adr/0005-budget-ram-et-hpa.md`).
 
 ## 8. Liste pour le plan de remédiation
-- Photos hébergées hors UE (Cloudinary) — écart assumé pour le POC, à documenter dans un ADR (`contexte.md` §2).
+- Photos hébergées hors UE (Cloudinary) — écart assumé pour le POC, documenté dans l'ADR 0022 (`contexte.md` §2).
 - Métadonnées EXIF (dont GPS) non supprimées des photos (RGPD).
 - Dépendance externe Cloudinary : quota, latence, disponibilité.
 - Perte possible d'un événement entre commit et publication → outbox transactionnelle.

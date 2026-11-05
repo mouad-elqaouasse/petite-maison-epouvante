@@ -1,0 +1,32 @@
+# US1a — troc-service → Cloudinary (api.cloudinary.com), HTTPS 443 vers Internet seulement (ADR 0021).
+# Une NetworkPolicy ne filtre pas par nom de domaine : tout le 443 public est ouvert (même limite que l'exp. 4).
+# Exclus : réseaux privés (dont pods 10.42/16 et services 10.43/16), adresses partagées des opérateurs, lien local
+# (métadonnées cloud), boucle locale et le nœud lui-même (Traefik, kubelet, API K3s). Le DNS est couvert par sortie-dns.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: troc-sortie-https
+  namespace: app
+  labels:
+    regle: troc-sortie-https
+spec:
+  podSelector:
+    matchLabels:
+      app: troc-service
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 100.64.0.0/10
+              - 169.254.0.0/16
+              - 127.0.0.0/8
+              - 51.178.39.218/32
+      ports:
+        - protocol: TCP
+          port: 443

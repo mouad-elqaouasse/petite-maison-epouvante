@@ -35,6 +35,7 @@ Aucun ticket « toute la base », « toute la CI » ou « tous les manifests ».
 | SQ-11 | [Protection de `main`](SQ-11-protection-main.md) | PR obligatoire, contrôles requis, commit du tag toujours possible | SQ-03, SQ-09 | Must |
 | SQ-12 | [Image Keycloak optimisée (bonus)](SQ-12-keycloak-optimise.md) | démarrage de Keycloak plus court et pic de mémoire plus bas | SQ-06 | Could |
 | SQ-13 | [Volume persistant pour RabbitMQ](SQ-13-rabbitmq-persistant.md) (ajouté le 03/11/2026) | messages en attente toujours présents après redémarrage du pod | SQ-05 ; avant US3 | Must |
+| SQ-14 | [Tests E2E dans la CI](SQ-14-e2e-compose-ci.md) (ajouté le 05/11/2026) | parcours Playwright + axe-core sur la pile Compose, bloquant avant publication | US1a ; scénario 2 après US3 | Should |
 
 ```
 SQ-00 ─► SQ-01 ─► SQ-02 ─┬─► SQ-03 ─┬─────────────► SQ-06 ─┐
