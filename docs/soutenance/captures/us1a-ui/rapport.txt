@@ -1,0 +1,29 @@
+1280 liste vide : 0 violation(s), dont 0 grave(s)
+1280 formulaire : 0 violation(s), dont 0 grave(s)
+1280 formulaire avec erreurs : 0 violation(s), dont 0 grave(s)
+focus après envoi invalide : #titre
+libellé « Titre » sous l'en-tête : true
+miniature chargée : true
+1280 formulaire avec photo choisie : 0 violation(s), dont 0 grave(s)
+zone survolée : classe true, transform matrix(1.01, 0, 0, 1.01, 0, 0)
+roue pendant l'envoi : animation roue
+1280 formulaire pendant l'envoi : 0 violation(s), dont 0 grave(s)
+1280 liste après publication : 0 violation(s), dont 0 grave(s)
+1280 liste avec photos Cloudinary : 0 violation(s), dont 0 grave(s)
+1280 px : cadres photo 366x275 (7 cartes) ; 2 photo(s) Cloudinary, chargées : true, variante choisie : w_400, w_400
+cartes en fondu : animation apparition
+carte survolée : transform matrix(1, 0, 0, 1, 0, -4)
+1280 liste en chargement : 0 violation(s), dont 0 grave(s)
+1280 liste en erreur : 0 violation(s), dont 0 grave(s)
+375 liste : 0 violation(s), dont 0 grave(s)
+375 px : cadres photo 341x256 (7 cartes) ; 2 photo(s) Cloudinary, chargées : true, variante choisie : w_400, w_400
+375 px, défilement horizontal : false
+375 formulaire avec photo choisie : 0 violation(s), dont 0 grave(s)
+375 formulaire : 0 violation(s), dont 0 grave(s)
+375 px, libellé « Titre » sous l'en-tête : true
+375 formulaire avec erreurs : 0 violation(s), dont 0 grave(s)
+375 px formulaire, défilement horizontal : false
+animations désactivées : fondu none, carte survolée none, transition 0s
+animations désactivées : zone survolée transform none, bordure rgb(241, 227, 198)
+erreurs console : 1
+1280px Failed to load resource: the server responded with a status of 503 (Service Unavailable)
