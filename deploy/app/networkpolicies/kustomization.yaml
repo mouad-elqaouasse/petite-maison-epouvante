@@ -12,3 +12,4 @@ resources:
   - 06-prometheus-cibles.yaml
   - 07-sortie-api-k8s.yaml
   - 08-grafana-prometheus.yaml
+  - 09-troc-sortie-https.yaml
