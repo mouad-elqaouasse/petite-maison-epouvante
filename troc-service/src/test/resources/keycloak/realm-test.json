@@ -78,6 +78,26 @@
       "lastName": "Test",
       "realmRoles": ["USER", "MODERATEUR"],
       "credentials": [{ "type": "password", "value": "moderateur-test", "temporary": false }]
+    },
+    {
+      "username": "alice",
+      "enabled": true,
+      "email": "alice@example.com",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Test",
+      "realmRoles": ["USER"],
+      "credentials": [{ "type": "password", "value": "alice", "temporary": false }]
+    },
+    {
+      "username": "bob",
+      "enabled": true,
+      "email": "bob@example.com",
+      "emailVerified": true,
+      "firstName": "Bob",
+      "lastName": "Test",
+      "realmRoles": ["USER"],
+      "credentials": [{ "type": "password", "value": "bob", "temporary": false }]
     }
   ]
 }
