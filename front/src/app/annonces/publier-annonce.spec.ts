@@ -11,6 +11,10 @@ describe('PublierAnnonce', () => {
   const CATEGORIES = ['Figurines', 'Films', 'BD', 'Jeux de société', 'Goodies'];
 
   beforeEach(() => {
+    // jsdom ne fournit pas les URL blob: des miniatures.
+    let numero = 0;
+    URL.createObjectURL = vi.fn(() => `blob:apercu-${++numero}`);
+    URL.revokeObjectURL = vi.fn();
     TestBed.configureTestingModule({
       imports: [PublierAnnonce],
       providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
@@ -129,6 +133,109 @@ describe('PublierAnnonce', () => {
     choisirPhoto(page, photo(1024, 'image/gif', 'chauve-souris.gif'));
     await fixture.whenStable();
     expect(erreur(page, 'photo')).toContain('JPEG, PNG ou WebP');
+  });
+
+  it('zone de dépôt : une photo glissée est retenue comme si elle était choisie', async () => {
+    const fixture = await afficherAvecCategories();
+    const page: HTMLElement = fixture.nativeElement;
+    const zone = page.querySelector('.depot') as HTMLElement;
+    const fichier = photo(150 * 1024, 'image/png', 'masque.png');
+
+    const survol = new Event('dragover', { cancelable: true });
+    Object.defineProperty(survol, 'dataTransfer', { value: { files: [] } });
+    zone.dispatchEvent(survol);
+    await fixture.whenStable();
+    expect(survol.defaultPrevented).toBe(true);
+    expect(zone.classList).toContain('depot-survol');
+
+    const depot = new Event('drop', { cancelable: true });
+    Object.defineProperty(depot, 'dataTransfer', { value: { files: [fichier] } });
+    zone.dispatchEvent(depot);
+    await fixture.whenStable();
+
+    expect(depot.defaultPrevented).toBe(true);
+    expect(zone.classList).not.toContain('depot-survol');
+    expect(page.querySelector('.depot-fichier')?.textContent).toContain('masque.png');
+  });
+
+  it('zone photo vide : icône, consigne et bouton « Choisir une photo » relié au champ fichier', async () => {
+    const fixture = await afficherAvecCategories();
+    const zone = (fixture.nativeElement as HTMLElement).querySelector('.depot') as HTMLElement;
+
+    expect(zone.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    expect(zone.textContent).toContain('Glissez votre photo ici');
+    const bouton = zone.querySelector('label.bouton-photo');
+    expect(bouton?.textContent?.trim()).toBe('Choisir une photo');
+    expect(bouton?.getAttribute('for')).toBe('photo');
+  });
+
+  it('champ fichier masqué à l\'écran seulement : libellé, focus clavier et aide conservés', async () => {
+    const fixture = await afficherAvecCategories();
+    const page: HTMLElement = fixture.nativeElement;
+    const champ = page.querySelector('#photo') as HTMLInputElement;
+
+    expect(champ.classList).toContain('visuellement-masque');
+    expect(champ.hidden).toBe(false);
+    expect(champ.tabIndex).not.toBe(-1);
+    expect(page.querySelector('label[for="photo"]:not(.bouton-photo)')?.textContent).toContain('Photo de l’objet');
+    expect(champ.getAttribute('aria-describedby')).toContain('aide-photo');
+  });
+
+  it('photo choisie : miniature, nom et taille dans la zone, bouton « Changer », nom absent de l\'aide', async () => {
+    const fixture = await afficherAvecCategories();
+    const page: HTMLElement = fixture.nativeElement;
+
+    choisirPhoto(page, photo(150 * 1024, 'image/jpeg', 'dracula.jpg'));
+    await fixture.whenStable();
+
+    const miniature = page.querySelector('.depot-miniature') as HTMLImageElement;
+    expect(miniature.getAttribute('src')).toBe('blob:apercu-1');
+    expect(miniature.getAttribute('alt')).toBe('Aperçu de la photo choisie');
+    expect(page.querySelector('.depot-fichier')?.textContent).toContain('dracula.jpg');
+    expect(page.querySelector('.depot-fichier')?.textContent).toContain('150 Ko');
+    expect(page.querySelector('label.bouton-photo')?.textContent?.trim()).toBe('Changer');
+    expect(page.querySelector('#aide-photo')?.textContent).not.toContain('dracula.jpg');
+    expect(page.querySelector('.depot [aria-live="polite"]')?.textContent).toContain('dracula.jpg');
+  });
+
+  it('changer de photo libère l\'aperçu précédent ; quitter l\'écran libère le dernier', async () => {
+    const fixture = await afficherAvecCategories();
+    const page: HTMLElement = fixture.nativeElement;
+
+    choisirPhoto(page, photo(1024, 'image/jpeg', 'a.jpg'));
+    choisirPhoto(page, photo(1024, 'image/png', 'b.png'));
+    await fixture.whenStable();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:apercu-1');
+    expect((page.querySelector('.depot-miniature') as HTMLImageElement).getAttribute('src')).toBe('blob:apercu-2');
+
+    fixture.destroy();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:apercu-2');
+  });
+
+  it('pendant l\'envoi : petite roue dans le bouton, masquée aux lecteurs d\'écran', async () => {
+    const fixture = await afficherAvecCategories();
+    const page: HTMLElement = fixture.nativeElement;
+    const bouton = () => page.querySelector('button[type="submit"]') as HTMLButtonElement;
+    expect(bouton().querySelector('.roue')).toBeNull();
+    await remplir(fixture);
+
+    await publier(fixture);
+
+    expect(bouton().querySelector('.roue')?.getAttribute('aria-hidden')).toBe('true');
+    http.expectOne('/api/troc/annonces').flush('', { status: 502, statusText: 'Bad Gateway' });
+    await fixture.whenStable();
+    expect(bouton().querySelector('.roue')).toBeNull();
+  });
+
+  it('format refusé : pas de miniature, message d\'erreur seulement', async () => {
+    const fixture = await afficherAvecCategories();
+    const page: HTMLElement = fixture.nativeElement;
+
+    choisirPhoto(page, photo(1024, 'image/gif', 'chauve-souris.gif'));
+    await fixture.whenStable();
+
+    expect(page.querySelector('.depot-miniature')).toBeNull();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
 
   it('annonce valide : POST multipart, bouton désactivé pendant l\'envoi, puis retour à la liste', async () => {

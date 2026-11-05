@@ -53,11 +53,64 @@ describe('ListeAnnonces', () => {
     const carte = page.querySelector('article');
     expect(carte?.querySelector('h2')?.textContent).toContain('Figurine Chucky 1988');
     const photo = carte?.querySelector('img');
-    expect(photo?.getAttribute('src')).toBe(chucky.photoUrl);
+    expect(photo?.getAttribute('src')).toContain('/image/upload/c_fill,ar_4:3,w_600,f_auto,q_auto/');
     expect(photo?.getAttribute('alt')).toBe('Figurine Chucky 1988');
     expect(carte?.textContent).toContain('Figurines');
     expect(carte?.textContent).toContain('Échange');
     expect(carte?.textContent).toContain('5 novembre 2026');
+  });
+
+  it('photo Cloudinary : src transformée en 4:3 sur 600 px, srcset, taille fixée et sizes', async () => {
+    const fixture = await afficher();
+    http.expectOne('/api/troc/annonces').flush([chucky]);
+    await fixture.whenStable();
+    const photo = (fixture.nativeElement as HTMLElement).querySelector('article img') as HTMLImageElement;
+
+    expect(photo.getAttribute('src')).toContain('/image/upload/c_fill,ar_4:3,w_600,f_auto,q_auto/');
+    expect(photo.getAttribute('srcset')).toContain('w_1200,f_auto,q_auto/chucky.jpg 1200w');
+    expect(photo.getAttribute('sizes')).toBeTruthy();
+    expect(photo.getAttribute('width')).toBe('600');
+    expect(photo.getAttribute('height')).toBe('450');
+  });
+
+  it('photo factice (hors Cloudinary) : affichée telle quelle, sans srcset', async () => {
+    const fixture = await afficher();
+    http.expectOne('/api/troc/annonces').flush([{ ...chucky, photoUrl: 'https://photos.invalid/factice/x' }]);
+    await fixture.whenStable();
+    const photo = (fixture.nativeElement as HTMLElement).querySelector('article img') as HTMLImageElement;
+
+    expect(photo.getAttribute('src')).toBe('https://photos.invalid/factice/x');
+    expect(photo.hasAttribute('srcset')).toBe(false);
+  });
+
+  it('apparition en fondu : chaque carte reçoit son rang, pour un décalage plafonné en CSS', async () => {
+    const fixture = await afficher();
+    http.expectOne('/api/troc/annonces').flush([chucky, { ...chucky, id: 'a2' }, { ...chucky, id: 'a3' }]);
+    await fixture.whenStable();
+    const rangs = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('.annonces-grille > li')]
+      .map((li) => li.style.getPropertyValue('--rang'));
+
+    expect(rangs).toEqual(['0', '1', '2']);
+  });
+
+  it('carte : catégorie en badge sur la photo et description', async () => {
+    const fixture = await afficher();
+    http.expectOne('/api/troc/annonces').flush([chucky]);
+    await fixture.whenStable();
+    const carte = (fixture.nativeElement as HTMLElement).querySelector('article');
+
+    expect(carte?.querySelector('.carte-badge')?.textContent).toContain('Figurines');
+    expect(carte?.querySelector('.carte-description')?.textContent).toContain('Bon état');
+  });
+
+  it('chargement : trois cartes vides, masquées aux lecteurs d\'écran', async () => {
+    const fixture = await afficher();
+    const page: HTMLElement = fixture.nativeElement;
+
+    const fantomes = page.querySelectorAll('.carte-fantome');
+    expect(fantomes.length).toBe(3);
+    expect(fantomes[0].closest('[aria-hidden="true"]')).not.toBeNull();
+    http.expectOne('/api/troc/annonces');
   });
 
   it('liste vide : invitation à publier', async () => {

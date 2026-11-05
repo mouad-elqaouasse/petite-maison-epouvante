@@ -30,7 +30,10 @@
    `troc-service` via `APP_CLOUDINARY_*`.
 6. **Sortie réseau** : NetworkPolicy `troc-sortie-https`, `troc-service` seul, TCP 443 vers Internet, réseaux privés,
    lien local, boucle locale et IP du nœud exclus.
-7. **CSP du front** : `img-src 'self' https://res.cloudinary.com` (sans le nom du compte).
+7. **CSP du front** : `img-src 'self' https://res.cloudinary.com blob:` (sans le nom du compte). `blob:` ajouté le
+   05/11/2026 (branche `us1a-ui`) pour la miniature de la photo choisie dans le formulaire : il ne désigne que des fichiers
+   ouverts par la page elle-même, et chaque URL est libérée (`revokeObjectURL`) au changement de photo ou à la sortie
+   de l'écran.
 
 ## Alternatives écartées
 
