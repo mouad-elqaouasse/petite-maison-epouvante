@@ -15,6 +15,17 @@
     @switch (liste.etat) {
       @case ('chargement') {
         <p class="aide" role="status">Chargement des annonces…</p>
+        <ul class="annonces-grille" aria-hidden="true">
+          @for (n of [1, 2, 3]; track n) {
+            <li class="carte carte-fantome">
+              <div class="carte-image"></div>
+              <div class="carte-corps">
+                <span class="fantome-ligne"></span>
+                <span class="fantome-ligne fantome-courte"></span>
+              </div>
+            </li>
+          }
+        </ul>
       }
       @case ('erreur') {
         <p class="erreur" role="alert">Les annonces n’ont pas pu être chargées. Vérifiez votre connexion, puis réessayez.</p>
@@ -28,25 +39,38 @@
           </div>
         } @else {
           <ul class="annonces-grille">
-            @for (annonce of liste.annonces; track annonce.id) {
-              <li>
+            @for (annonce of liste.annonces; track annonce.id; let rang = $index) {
+              @let image = photo(annonce.photoUrl);
+              <li [style.--rang]="rang">
                 <article class="carte">
-                  <img class="carte-photo" [src]="annonce.photoUrl" [alt]="annonce.titre" loading="lazy" />
-                  <h2 class="carte-titre">{{ annonce.titre }}</h2>
-                  <dl class="carte-generique">
-                    <div>
-                      <dt>Catégorie</dt>
-                      <dd>{{ annonce.categorie }}</dd>
-                    </div>
-                    <div>
-                      <dt>Type</dt>
-                      <dd>{{ type(annonce.type) }}</dd>
-                    </div>
-                    <div>
-                      <dt>Publiée le</dt>
-                      <dd><time [attr.datetime]="annonce.creeLe">{{ date(annonce.creeLe) }}</time></dd>
-                    </div>
-                  </dl>
+                  <div class="carte-image">
+                    <img
+                      [src]="image.src"
+                      [attr.srcset]="image.srcset"
+                      [attr.sizes]="image.srcset ? tailles : null"
+                      [alt]="annonce.titre"
+                      width="600"
+                      height="450"
+                      loading="lazy"
+                    />
+                    <span class="carte-badge">{{ annonce.categorie }}</span>
+                  </div>
+                  <div class="carte-corps">
+                    <h2 class="carte-titre">{{ annonce.titre }}</h2>
+                    @if (annonce.description) {
+                      <p class="carte-description">{{ annonce.description }}</p>
+                    }
+                    <dl class="carte-generique">
+                      <div>
+                        <dt>Type</dt>
+                        <dd>{{ type(annonce.type) }}</dd>
+                      </div>
+                      <div>
+                        <dt>Publiée le</dt>
+                        <dd><time [attr.datetime]="annonce.creeLe">{{ date(annonce.creeLe) }}</time></dd>
+                      </div>
+                    </dl>
+                  </div>
                 </article>
               </li>
             }

@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, ElementRef, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AnnoncesService, ErreursChamps } from './annonces.service';
@@ -42,13 +42,18 @@ export class PublierAnnonce {
 
   protected readonly categories = signal<EtatCategories>({ etat: 'chargement' });
   protected readonly photo = signal<File | null>(null);
+  protected readonly survol = signal(false);
   protected readonly soumis = signal(false);
   protected readonly envoi = signal(false);
   protected readonly erreursServeur = signal<ErreursChamps>({});
   protected readonly erreurGlobale = signal<string | null>(null);
 
+  /** Miniature de la photo choisie : URL blob: locale (CSP img-src blob:, ADR 0021), libérée à chaque changement. */
+  protected readonly apercu = signal<string | null>(null);
+
   constructor() {
     this.chargerCategories();
+    inject(DestroyRef).onDestroy(() => this.remplacerApercu(null));
   }
 
   protected chargerCategories(): void {
@@ -60,9 +65,37 @@ export class PublierAnnonce {
   }
 
   protected choisirPhoto(evenement: Event): void {
-    const fichier = (evenement.target as HTMLInputElement).files?.[0] ?? null;
+    this.retenirPhoto((evenement.target as HTMLInputElement).files?.[0] ?? null);
+  }
+
+  /** Autorise le dépôt sur la zone (sans quoi le navigateur ouvrirait le fichier) et la met en évidence. */
+  protected survoler(evenement: DragEvent): void {
+    evenement.preventDefault();
+    this.survol.set(true);
+  }
+
+  protected deposer(evenement: DragEvent): void {
+    evenement.preventDefault();
+    this.survol.set(false);
+    const fichier = evenement.dataTransfer?.files?.[0];
+    if (fichier) {
+      this.retenirPhoto(fichier);
+    }
+  }
+
+  private retenirPhoto(fichier: File | null): void {
     this.photo.set(fichier);
     this.erreursServeur.update(({ photo: _photo, ...autres }) => autres);
+    // Pas de miniature pour un format refusé : le message d'erreur suffit.
+    this.remplacerApercu(fichier && FORMATS.includes(fichier.type) ? URL.createObjectURL(fichier) : null);
+  }
+
+  private remplacerApercu(url: string | null): void {
+    const precedent = this.apercu();
+    if (precedent) {
+      URL.revokeObjectURL(precedent);
+    }
+    this.apercu.set(url);
   }
 
   /** Message affiché sous un champ : contrôle côté client d'abord, sinon refus du serveur. */

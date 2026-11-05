@@ -98,21 +98,53 @@
       @let fichier = photo();
       <div class="champ">
         <label for="photo">Photo de l’objet</label>
-        <input
-          id="photo"
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          (change)="choisirPhoto($event)"
-          [attr.aria-invalid]="erreurPhoto ? 'true' : null"
-          [attr.aria-describedby]="erreurPhoto ? 'aide-photo erreur-photo' : 'aide-photo'"
-        />
-        <p id="aide-photo" class="champ-aide">
+        <!-- Zone de dépôt : glisser un fichier revient à le choisir. Le vrai champ fichier est masqué à l'écran seulement
+             (focus clavier, libellé « Photo de l'objet », aide et erreur conservés) ; « Choisir une photo » et
+             « Changer » sont des libellés du même champ, masqués aux lecteurs d'écran pour ne pas doubler son nom. -->
+        <div
+          class="depot"
+          [class.depot-survol]="survol()"
+          [class.depot-choisie]="fichier"
+          (dragover)="survoler($event)"
+          (dragleave)="survol.set(false)"
+          (drop)="deposer($event)"
+        >
+          <input
+            id="photo"
+            class="visuellement-masque"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            (change)="choisirPhoto($event)"
+            [attr.aria-invalid]="erreurPhoto ? 'true' : null"
+            [attr.aria-describedby]="erreurPhoto ? 'aide-photo erreur-photo' : 'aide-photo'"
+          />
           @if (fichier) {
-            {{ fichier.name }}, {{ tailleLisible(fichier.size) }}.
+            @let miniature = apercu();
+            @if (miniature) {
+              <img class="depot-miniature" [src]="miniature" alt="Aperçu de la photo choisie" width="160" height="120" />
+            }
+            <p class="depot-fichier">
+              <span class="depot-nom">{{ fichier.name }}</span>
+              <span class="depot-taille">{{ tailleLisible(fichier.size) }}</span>
+            </p>
+            <label for="photo" class="bouton-photo" aria-hidden="true">Changer</label>
           } @else {
-            Une photo, JPEG, PNG ou WebP, 2 Mo au plus.
+            <svg class="depot-icone" aria-hidden="true" viewBox="0 0 24 24" width="40" height="40" fill="none"
+                 stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="1" />
+              <circle cx="9" cy="10" r="2" />
+              <path d="M21 16l-5-5-9 9" />
+            </svg>
+            <p class="depot-consigne">Glissez votre photo ici</p>
+            <label for="photo" class="bouton-photo" aria-hidden="true">Choisir une photo</label>
           }
-        </p>
+          <p class="visuellement-masque" aria-live="polite">
+            @if (fichier) {
+              Photo choisie : {{ fichier.name }}, {{ tailleLisible(fichier.size) }}.
+            }
+          </p>
+        </div>
+        <p id="aide-photo" class="champ-aide">Une photo, JPEG, PNG ou WebP, 2 Mo au plus.</p>
         @if (erreurPhoto) {
           <p id="erreur-photo" class="champ-erreur">{{ erreurPhoto }}</p>
         }
@@ -121,7 +153,12 @@
       <p class="erreur formulaire-erreur" role="alert">{{ erreurGlobale() }}</p>
 
       <button type="submit" class="bouton-principal" [disabled]="envoi()">
-        {{ envoi() ? 'Publication…' : 'Publier l’annonce' }}
+        @if (envoi()) {
+          <span class="roue" aria-hidden="true"></span>
+          Publication…
+        } @else {
+          Publier l’annonce
+        }
       </button>
     </form>
   </section>

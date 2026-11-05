@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Annonce, AnnoncesService } from './annonces.service';
+import { photoCarte, PhotoCarte } from './photo-cloudinary';
 
 type EtatListe = { etat: 'chargement' } | { etat: 'chargee'; annonces: Annonce[] } | { etat: 'erreur' };
 
@@ -30,6 +31,13 @@ export class ListeAnnonces {
       next: (annonces) => this.etat.set({ etat: 'chargee', annonces }),
       error: () => this.etat.set({ etat: 'erreur' }),
     });
+  }
+
+  /** Largeur affichée d'une carte selon la grille (1 colonne, puis 2, puis 3 dans 72 rem) : choix de la variante. */
+  protected readonly tailles = '(min-width: 72rem) 22rem, (min-width: 40rem) 45vw, 100vw';
+
+  protected photo(url: string): PhotoCarte {
+    return photoCarte(url);
   }
 
   protected date(iso: string): string {
