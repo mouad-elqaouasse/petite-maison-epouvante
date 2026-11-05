@@ -38,8 +38,9 @@ export class SessionService {
     }
   }
 
-  connecter(): void {
-    void this.keycloak.login();
+  /** Sans adresse de retour, Keycloak ramène sur la page courante. */
+  connecter(retour?: string): void {
+    void this.keycloak.login(retour ? { redirectUri: retour } : undefined);
   }
 
   deconnecter(): void {
