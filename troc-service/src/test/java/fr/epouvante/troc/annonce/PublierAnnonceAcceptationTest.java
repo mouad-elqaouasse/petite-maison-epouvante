@@ -36,7 +36,7 @@ class PublierAnnonceAcceptationTest {
 
     @DynamicPropertySource
     static void keycloak(DynamicPropertyRegistry proprietes) {
-        KeycloakDeTest.proprietes(proprietes);
+        KeycloakPartage.proprietes(proprietes);
     }
 
     @LocalServerPort
@@ -53,7 +53,7 @@ class PublierAnnonceAcceptationTest {
     @BeforeEach
     void contexte() {
         base.sql("delete from annonce").update();
-        alice = KeycloakDeTest.jeton("alice");
+        alice = KeycloakPartage.jeton("alice");
     }
 
     private RequestSpecification api(String jeton) {
@@ -222,15 +222,15 @@ class PublierAnnonceAcceptationTest {
     @Test
     @DisplayName("L'auteur est tiré du jeton et non du corps de la requête")
     void l_auteur_est_tire_du_jeton_et_non_du_corps_de_la_requete() {
-        String bob = KeycloakDeTest.sub(KeycloakDeTest.jeton("bob"));
+        String bob = KeycloakPartage.sub(KeycloakPartage.jeton("bob"));
 
         String auteur = annonceValide().avec("auteurId", bob).publier(alice)
                 .statusCode(201)
                 .extract().path("auteurId");
 
-        assertThat(auteur).isEqualTo(KeycloakDeTest.sub(alice)).isNotEqualTo(bob);
+        assertThat(auteur).isEqualTo(KeycloakPartage.sub(alice)).isNotEqualTo(bob);
         assertThat(base.sql("select auteur_id from annonce").query(String.class).single())
-                .isEqualTo(KeycloakDeTest.sub(alice));
+                .isEqualTo(KeycloakPartage.sub(alice));
     }
 
     @Test
@@ -264,7 +264,7 @@ class PublierAnnonceAcceptationTest {
                 .statusCode(201)
                 .extract().path("photoUrl");
 
-        api(KeycloakDeTest.jeton("bob"))
+        api(KeycloakPartage.jeton("bob"))
                 .get("/annonces")
                 .then()
                 .statusCode(200)

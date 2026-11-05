@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.Test;
 
 import fr.epouvante.troc.annonce.StockagePhoto.Format;
+import fr.epouvante.troc.annonce.StockagePhoto.PhotoVerifiee;
 
 // Vérification d'une photo avant tout stockage : taille et format lu dans les premiers octets
 // (docs/cadrage.md §1.1 point 3 ; docs/experimentations/exp4-cloudinary-rapport.md §9).
@@ -69,6 +70,17 @@ class VerificationPhotoTest {
         wav[11] = 'E';
 
         assertThatThrownBy(() -> verification.verifier(wav)).isInstanceOf(VerificationPhoto.PhotoRefusee.class);
+    }
+
+    @Test
+    void deux_photos_de_meme_contenu_sont_egales_et_toString_ne_contient_pas_les_octets() {
+        PhotoVerifiee a = new PhotoVerifiee(Photos.jpeg(1024), Format.JPEG);
+        PhotoVerifiee b = new PhotoVerifiee(Photos.jpeg(1024), Format.JPEG);
+
+        assertThat(a).isEqualTo(b).hasSameHashCodeAs(b);
+        assertThat(a).isNotEqualTo(new PhotoVerifiee(Photos.jpeg(1024), Format.PNG));
+        assertThat(a).isNotEqualTo(new PhotoVerifiee(Photos.jpeg(2048), Format.JPEG));
+        assertThat(a.toString()).isEqualTo("PhotoVerifiee[format=JPEG, taille=1024 octets]");
     }
 
     @Test

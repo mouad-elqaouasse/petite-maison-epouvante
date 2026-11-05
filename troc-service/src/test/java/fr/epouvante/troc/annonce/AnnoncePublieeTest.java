@@ -75,7 +75,7 @@ class AnnoncePublieeTest {
 
     @DynamicPropertySource
     static void proprietes(DynamicPropertyRegistry proprietes) {
-        KeycloakDeTest.proprietes(proprietes);
+        KeycloakPartage.proprietes(proprietes);
         proprietes.add("spring.rabbitmq.host", RABBITMQ::getHost);
         proprietes.add("spring.rabbitmq.port", RABBITMQ::getAmqpPort);
         proprietes.add("spring.rabbitmq.username", () -> "troc");
@@ -97,7 +97,7 @@ class AnnoncePublieeTest {
     void contexte() {
         base.sql("delete from annonce").update();
         new RabbitAdmin(connexionAdmin).purgeQueue(FILE, false);
-        alice = KeycloakDeTest.jeton("alice");
+        alice = KeycloakPartage.jeton("alice");
     }
 
     @Test
@@ -126,7 +126,7 @@ class AnnoncePublieeTest {
         assertThat(evenement.getInt("version")).isEqualTo(1);
         assertThat(evenement.getString("annonceId")).isEqualTo(id);
         assertThat(evenement.getString("categorie")).isEqualTo("Films");
-        assertThat(evenement.getString("auteurId")).isEqualTo(KeycloakDeTest.sub(alice));
+        assertThat(evenement.getString("auteurId")).isEqualTo(KeycloakPartage.sub(alice));
         assertThat(evenement.getString("titre")).isEqualTo("Halloween, la nuit des masques");
         assertThat(evenement.getString("creeLe")).isEqualTo(annonce.getString("creeLe"));
         assertThat(evenement.getString("photoUrl")).isEqualTo(annonce.getString("photoUrl"));

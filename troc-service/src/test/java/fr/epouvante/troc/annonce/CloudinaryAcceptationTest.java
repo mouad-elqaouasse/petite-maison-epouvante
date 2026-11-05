@@ -62,7 +62,7 @@ class CloudinaryAcceptationTest {
 
     @DynamicPropertySource
     static void proprietes(DynamicPropertyRegistry proprietes) {
-        KeycloakDeTest.proprietes(proprietes);
+        KeycloakPartage.proprietes(proprietes);
         proprietes.add("app.cloudinary.url", CLOUDINARY::baseUrl);
     }
 
@@ -80,7 +80,7 @@ class CloudinaryAcceptationTest {
     @BeforeEach
     void contexte() {
         base.sql("delete from annonce").update();
-        alice = KeycloakDeTest.jeton("alice");
+        alice = KeycloakPartage.jeton("alice");
     }
 
     private ValidatableResponse publier(byte[] photo, String nom, String type) {

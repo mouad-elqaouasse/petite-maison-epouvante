@@ -14,10 +14,10 @@ record AnnoncePubliee(
         Instant creeLe,
         String photoUrl) {
 
-    static final int VERSION = 1;
+    static final int VERSION_CONTRAT = 1;
 
     static AnnoncePubliee de(Annonce a) {
-        return new AnnoncePubliee(VERSION, a.id(), a.categorie().libelle(), a.auteurId(), a.titre(), a.creeLe(),
+        return new AnnoncePubliee(VERSION_CONTRAT, a.id(), a.categorie().libelle(), a.auteurId(), a.titre(), a.creeLe(),
                 a.photoUrl());
     }
 }
