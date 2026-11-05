@@ -42,7 +42,8 @@ flowchart LR
 
 ## 2. Modèle de données cible
 
-> **Modèle cible**, pas encore implémenté : les tables arrivent avec les user stories (US1a, US2, US3, US4, US5).
+> **Modèle cible** : les tables arrivent avec les user stories. `annonce` est implémentée depuis US1a (migration
+> `V2__annonce.sql`, accès par `JdbcClient`, ADR 0019) ; `abonnement` et `notification` arrivent avec US2 et US3.
 > Noms de colonnes et types indicatifs ; les règles viennent du cadrage et du backlog.
 
 ```mermaid
