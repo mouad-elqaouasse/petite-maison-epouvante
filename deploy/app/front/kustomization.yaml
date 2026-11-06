@@ -7,4 +7,4 @@ resources:
   - ingress.yaml
 images:
   - name: ghcr.io/mouad-elqaouasse/petite-maison-epouvante/front
-    newTag: "c6a27e0ad270ec55860a3d66ea869db58b1f8745"
+    newTag: "0abd761fd580e654c4add8036dfbeeb3ab0bdc0b"
