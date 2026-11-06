@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 
 // Accès à la table abonnement par JdbcClient, sans JPA (ADR 0019).
 @Repository
-class AbonnementDepot {
+public class AbonnementDepot {
 
     private final JdbcClient base;
 
@@ -23,6 +23,14 @@ class AbonnementDepot {
                 .list().stream()
                 .sorted()
                 .toList();
+    }
+
+    // US3 : membres abonnés à une catégorie (index abonnement_par_categorie).
+    public List<String> membresAbonnes(Categorie categorie) {
+        return base.sql("select membre_id from abonnement where categorie = :categorie")
+                .param("categorie", categorie.name())
+                .query(String.class)
+                .list();
     }
 
     // Idempotent : un ajout rejoué ne change rien.

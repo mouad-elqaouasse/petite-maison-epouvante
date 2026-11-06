@@ -10,8 +10,8 @@ import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.MountableFile;
 
 // Keycloak avec le realm de test (docs/cadrage.md §1.3.12), démarré une seule fois pour toutes les classes de tests
-// d'acceptation : un conteneur partagé évite environ 20 s de démarrage par classe. Arrêté par Testcontainers (Ryuk).
-final class KeycloakPartage {
+// d'acceptation (US2, US3) : un conteneur partagé évite environ 20 s de démarrage par classe. Arrêté par Testcontainers (Ryuk).
+public final class KeycloakPartage {
 
     // Même version que sur le cluster (ADR 0003).
     private static final GenericContainer<?> KEYCLOAK = new GenericContainer<>("quay.io/keycloak/keycloak:26.8.1")
@@ -32,14 +32,14 @@ final class KeycloakPartage {
         return "http://" + KEYCLOAK.getHost() + ":" + KEYCLOAK.getMappedPort(8080) + "/realms/test";
     }
 
-    static void proprietes(DynamicPropertyRegistry proprietes) {
+    public static void proprietes(DynamicPropertyRegistry proprietes) {
         proprietes.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", KeycloakPartage::realm);
         proprietes.add("spring.security.oauth2.resourceserver.jwt.jwk-set-uri",
                 () -> realm() + "/protocol/openid-connect/certs");
     }
 
     // Comptes du realm de test : mot de passe = nom d'utilisateur.
-    static String jeton(String utilisateur) {
+    public static String jeton(String utilisateur) {
         return given()
                 .formParam("grant_type", "password")
                 .formParam("client_id", "client-test")
