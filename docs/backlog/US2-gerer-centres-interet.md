@@ -6,6 +6,7 @@
 | Priorité MoSCoW | **Must** (`cadrage.md` §5) |
 | Dépendances | **US1a** pour l'écran (`GET /categories`). L'API des abonnements n'en dépend pas. Ordre prévu : après US1a (`cadrage.md` §2). |
 | Sources | `cadrage.md` §1.1 point 1, §1.2 points 7 et 9, §2 ; `contexte.md` §1 |
+| Décisions | D1 à D4 validées le 05/11/2026 : ADR 0024 (liste des catégories copiée) ; CSRF : ADR 0023 point 2 |
 
 ## User story
 
@@ -73,4 +74,14 @@ Page **« Mes centres d'intérêt »** (route protégée) :
 - Le membre est identifié par le `sub` de son jeton, jamais par un paramètre de la requête (`cadrage.md` §1.1 point 2, même principe).
 - `notification-service` détient les abonnements ; `troc-service` ne les connaît pas (`cadrage.md` §1.2 point 7).
 - La liste des catégories existe donc dans les deux services (`GET /categories` côté `troc-service`, validation des abonnements côté
-  `notification-service`) : elles doivent rester identiques.
+  `notification-service`) : elles doivent rester identiques. Copie de l'enum, figée par `CategorieTest` (ADR 0024, D1).
+
+## Précisions validées le 05/11/2026 (ADR 0024)
+
+- Chemins réels : `/api/notifications/abonnements[/{categorie}]` (ADR 0006) ; catégorie passée par son **libellé**,
+  encodé dans l'URL (« Jeux de société » → `Jeux%20de%20soci%C3%A9t%C3%A9`) (D2).
+- « La réponse indique un succès » = **204**. `PUT` et `DELETE` sont idempotents : retirer une catégorie non suivie
+  répond aussi 204 ; une catégorie inconnue → 400 (ProblemDetail), aussi pour `DELETE` (D3).
+- `PUT` ou `DELETE` sans jeton → 401 (et non 403) : protection CSRF ignorée sur `/api/**`, sans cookie (ADR 0023).
+- Tests : `GererAbonnementsAcceptationTest` (un test par scénario, même nom, plus les règles ci-dessus) ;
+  écran : `centres-interet.spec.ts`. Captures : `docs/soutenance/captures/us2-ui/`.

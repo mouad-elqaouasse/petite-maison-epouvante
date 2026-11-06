@@ -1,0 +1,19 @@
+1280 aucune catégorie suivie : 0 violation(s), dont 0 grave(s)
+clavier : première case atteinte par Tab : true
+clavier : Espace → « Abonnement à Figurines ajouté. »
+clavier : focus resté sur la case après l'enregistrement : true
+après ajout : « Abonnement à Jeux de société ajouté. »
+1280 catégories suivies : 0 violation(s), dont 0 grave(s)
+après rechargement, cochées (lues dans notification-service) : Figurines, BD, Jeux de société
+après retrait : « Abonnement à BD retiré. »
+échec simulé : Goodies cochée = false, « L’abonnement à Goodies n’a pas pu être modifié. Réessayez. »
+1280 échec d’enregistrement : 0 violation(s), dont 0 grave(s)
+1280 chargement : 0 violation(s), dont 0 grave(s)
+1280 erreur de chargement : 0 violation(s), dont 0 grave(s)
+Réessayer : cases affichées = 5
+375 catégories suivies : 0 violation(s), dont 0 grave(s)
+375 px, défilement horizontal : false
+375 px, hauteur des lignes (cible tactile ≥ 44 px) : 44, 45
+erreurs console : 2
+1280px Failed to load resource: the server responded with a status of 503 (Service Unavailable)
+1280px Failed to load resource: the server responded with a status of 503 (Service Unavailable)
