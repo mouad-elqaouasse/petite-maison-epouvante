@@ -21,6 +21,7 @@ describe('App (en-tête)', () => {
         provideRouter([
           { path: 'annonces', component: Vide },
           { path: 'annonces/nouvelle', component: Vide },
+          { path: 'centres-interet', component: Vide },
         ]),
         { provide: SessionService, useValue: session },
       ],
@@ -47,6 +48,15 @@ describe('App (en-tête)', () => {
     const courants = [...page.querySelectorAll('nav a[aria-current="page"]')].map((a) => a.textContent?.trim());
 
     expect(courants).toEqual(['Publier une annonce']);
+  });
+
+  // US2 : lien vers « Mes centres d'intérêt ».
+  it('mène à « Mes centres d’intérêt », marqué comme page courante', async () => {
+    const page = await afficher('/centres-interet');
+    const lien = [...page.querySelectorAll('nav a')].find((a) => a.textContent?.trim() === 'Mes centres d’intérêt');
+
+    expect(lien?.getAttribute('href')).toBe('/centres-interet');
+    expect(lien?.getAttribute('aria-current')).toBe('page');
   });
 
   it('non connecté : pas d\'en-tête', async () => {
