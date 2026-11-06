@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# SQ-05 — Secrets RabbitMQ de app (ADR 0010), à lancer sur le VPS : bash rabbitmq-secrets.sh
+# SQ-05 — Secrets RabbitMQ de app (ADR 0010, 0026), à lancer sur le VPS : bash rabbitmq-secrets.sh
+# (rabbitmq-definitions.json copié dans le même dossier).
 # - troc-rabbitmq, notification-rabbitmq : mot de passe en clair de chaque service (clé password) ;
 # - rabbitmq-definitions : definitions.json chargé par le broker au démarrage, avec les hachés des mots de passe.
 # Mots de passe générés ici (openssl rand), jamais affichés. Relancé, le script garde les mots de passe existants
@@ -32,40 +33,15 @@ MDP_NOTIFICATION=$(mot_de_passe notification-rabbitmq)
 HACHE_TROC=$(hache "$MDP_TROC")
 HACHE_NOTIFICATION=$(hache "$MDP_NOTIFICATION")
 
-# Topologie (docs/cadrage.md §1.2.8, reprise de l'exp. 2) : exchange annonces (topic), clé annonce.publiee ;
-# file quorum, 1 livraison + 3 réessais (x-delivery-limit=3) puis dead-lettering vers annonces.dlx et la DLQ.
-# Droits configure / write / read (§1.2.10) : troc publie sur annonces ; notification lit sa file et la DLQ.
-cat > "$TMP/definitions.json" <<EOF
-{
-  "rabbit_version": "4.4.0",
-  "users": [
-    {"name": "troc", "password_hash": "$HACHE_TROC", "hashing_algorithm": "rabbit_password_hashing_sha256", "tags": []},
-    {"name": "notification", "password_hash": "$HACHE_NOTIFICATION", "hashing_algorithm": "rabbit_password_hashing_sha256", "tags": []}
-  ],
-  "vhosts": [{"name": "/"}],
-  "permissions": [
-    {"user": "troc", "vhost": "/", "configure": "^$", "write": "^annonces$", "read": "^$"},
-    {"user": "notification", "vhost": "/", "configure": "^$", "write": "^$", "read": "^notification\\\\.annonce-publiee(\\\\.dlq)?$"}
-  ],
-  "exchanges": [
-    {"name": "annonces", "vhost": "/", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {}},
-    {"name": "annonces.dlx", "vhost": "/", "type": "fanout", "durable": true, "auto_delete": false, "internal": false, "arguments": {}}
-  ],
-  "queues": [
-    {"name": "notification.annonce-publiee", "vhost": "/", "durable": true, "auto_delete": false, "arguments": {
-      "x-queue-type": "quorum", "x-delivery-limit": 3, "x-dead-letter-exchange": "annonces.dlx",
-      "x-dead-letter-strategy": "at-least-once", "x-overflow": "reject-publish"}},
-    {"name": "notification.annonce-publiee.dlq", "vhost": "/", "durable": true, "auto_delete": false, "arguments": {
-      "x-queue-type": "quorum"}}
-  ],
-  "bindings": [
-    {"source": "annonces", "vhost": "/", "destination": "notification.annonce-publiee", "destination_type": "queue",
-     "routing_key": "annonce.publiee", "arguments": {}},
-    {"source": "annonces.dlx", "vhost": "/", "destination": "notification.annonce-publiee.dlq", "destination_type": "queue",
-     "routing_key": "", "arguments": {}}
-  ]
-}
-EOF
+# Comptes, droits et topologie (docs/cadrage.md §1.2.8 et §1.2.10) : rabbitmq-definitions.json, à côté de ce script,
+# aussi chargé par les tests de notification-service (ADR 0026). Seuls les hachés sont ajoutés ici
+# (base64, sans « | » : séparateur de sed sans risque).
+sed -e "s|__HACHE_TROC__|$HACHE_TROC|" -e "s|__HACHE_NOTIFICATION__|$HACHE_NOTIFICATION|" \
+  "$(dirname "$0")/rabbitmq-definitions.json" > "$TMP/definitions.json"
+if grep -q '__HACHE_' "$TMP/definitions.json"; then
+  echo "Marqueur de haché non remplacé" >&2
+  exit 1
+fi
 
 # Mots de passe passés par fichier, jamais en argument (visibles dans ps) ni affichés.
 appliquer() {  # $1 Secret, $2 mot de passe
