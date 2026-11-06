@@ -60,7 +60,8 @@ Fonctionnalité: Notifier les membres d'une nouvelle annonce
 ## Écran Angular minimal
 
 Page **« Mes notifications »** en lecture seule (route protégée) : type (Confirmation / Alerte), texte, titre de l'annonce, date.
-Un compteur dans l'en-tête indique le nombre de notifications.
+~~Un compteur dans l'en-tête indique le nombre de notifications.~~ Reporté à US4 (décision du 06/11/2026) : sans le
+marquage « lue », il ne ferait que monter. L'en-tête porte seulement le lien « Mes notifications ».
 Cet écran permet la démonstration de la tranche « publier → notifier » et le scénario E2E n° 2 (`cadrage.md` §1.3 point 12).
 Le marquage « lue » est ajouté par US4.
 
@@ -73,3 +74,21 @@ Le marquage « lue » est ajouté par US4.
   `basic.reject` ou après un retry Spring, jamais par `basic.nack` avec remise en file, qui boucle sans fin depuis 4.3
   (`cadrage.md` §1.2 point 8 ; `docs/experimentations/exp2-rabbitmq-rapport.md` §6).
 - Hors périmètre : e-mail, push, WebSocket ; mise à jour des notifications d'une annonce retirée (`cadrage.md` §6).
+
+## Précisions validées le 06/11/2026 (ADR 0025 et 0026)
+
+- Consommateur en **acquittement manuel** : `basicAck` après le commit ; tout échec (JSON illisible, version inconnue,
+  base indisponible) → pause de 2 s puis `basicReject(requeue=true)`, jamais `basicNack` ; prefetch 10 (D1 à D3).
+- « L'enregistrement des notifications échoue » est simulé par une coupure de la base (Toxiproxy) ; un message
+  illisible suit la même règle (4 livraisons, puis DLQ). Preuve : en-tête `x-death` du message lu dans la DLQ.
+- Compte RabbitMQ `notification` : lecture de sa file seulement, plus de la DLQ (D4, `cadrage.md` §1.2 point 10).
+- Topologie et droits lus par les tests dans `deploy/scripts/rabbitmq-definitions.json`, le fichier utilisé sur le VPS (D5).
+- Résilience (D6) : test Testcontainers (service arrêté, publication, redémarrage, la notification arrive) et
+  démonstration sur le VPS (`scale` à 0, publication, `scale` à 1), capturée dans `docs/soutenance/captures/us3/`.
+- Écran : bouton « Actualiser », date et heure (Europe/Paris), lien vers « Mes centres d'intérêt » si la liste est vide ;
+  en-tête en grille de deux colonnes sous 48 rem (quatre liens ne tiennent plus à 375 px). Captures :
+  `docs/soutenance/captures/us3-ui/`.
+- `GET /api/notifications` : notifications du membre connecté, plus récentes d'abord ; champs `type`, `texte`,
+  `annonceId`, `titreAnnonce`, `creeLe`. La colonne `lue` arrive avec US4 (D7).
+- Tests : `NotifierNouvelleAnnonceAcceptationTest` (un test par scénario, même nom), `ConsommateurFiabiliteTest`
+  (DLQ, idempotence, ack après commit, droits, résilience) ; écran : `notifications.spec.ts`.

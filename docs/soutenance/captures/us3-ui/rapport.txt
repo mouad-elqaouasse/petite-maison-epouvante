@@ -1,0 +1,14 @@
+1280 liste : 0 violation(s), dont 0 grave(s)
+lien d'en-tête : « Mes notifications », aria-current=page
+ordre affiché : Affiche Halloween 1978 | Figurine Chucky 1988 en boîte d’origine, jamais déballée | Jeu Ouija 1972 | VHS Evil Dead
+1280 vide : 0 violation(s), dont 0 grave(s)
+1280 chargement : 0 violation(s), dont 0 grave(s)
+1280 erreur : 0 violation(s), dont 0 grave(s)
+Réessayer : notifications affichées = 4
+clavier : « Actualiser » atteint par Tab : true
+clavier : Entrée sur « Actualiser » → liste rechargée (4 notifications)
+375 liste : 0 violation(s), dont 0 grave(s)
+375 px, défilement horizontal : false
+375 vide : 0 violation(s), dont 0 grave(s)
+erreurs console : 1
+  Failed to load resource: the server responded with a status of 503 (Service Unavailable)

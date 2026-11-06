@@ -44,7 +44,8 @@ flowchart LR
 
 > **Modèle cible** : les tables arrivent avec les user stories. `annonce` est implémentée depuis US1a (migration
 > `V2__annonce.sql`, accès par `JdbcClient`, ADR 0019) ; `abonnement` depuis US2 (migration `V2__abonnement.sql` de
-> `notification-service`, catégorie stockée par son code, index par catégorie pour US3) ; `notification` arrive avec US3.
+> `notification-service`, catégorie stockée par son code, index par catégorie pour US3) ; `notification` depuis US3
+> (migration `V3__notification.sql`, sans la colonne `lue`, ajoutée par US4, ADR 0025).
 > Noms de colonnes et types indicatifs ; les règles viennent du cadrage et du backlog.
 
 ```mermaid
