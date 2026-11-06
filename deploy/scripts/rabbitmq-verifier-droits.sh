@@ -3,7 +3,8 @@
 # Prérequis : image exp2-amqp:2 (clients pika, experimentations/exp2/app) importée dans containerd de K3s, puis
 # supprimée après le test (docker build, docker save | ssh … 'sudo k3s ctr images import -').
 # Pod éphémère, mots de passe lus dans les Secrets par variables d'environnement, jamais affichés.
-# Attendu : troc publie (confirmé) mais ne lit pas ; notification lit et acquitte mais ne publie pas (403).
+# Attendu : troc publie (confirmé) mais ne lit pas ; notification lit et acquitte sa file, mais ne lit pas la DLQ
+# (ADR 0026) et ne publie pas (403).
 set -euo pipefail
 NS=app
 
@@ -71,8 +72,7 @@ spec:
           else:
               ch.basic_ack(methode.delivery_tag)
               print(f"OK : notification lit et acquitte {corps.decode()}", flush=True)
-          ch.basic_get(FILE + ".dlq")
-          print("OK : notification lit la DLQ", flush=True)
+          refuse("notification lit la DLQ", lambda: notif.channel().basic_get(FILE + ".dlq"))
 
           def publier():
               c = notif.channel(); c.confirm_delivery()

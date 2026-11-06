@@ -1,7 +1,8 @@
 # Événement `AnnoncePubliee` — contrat, version 1
 
 Sources : `docs/cadrage.md` §1.2 points 7, 8 et 10 ; ADR 0010 (topologie), ADR 0020 (ce contrat).
-Producteur : `troc-service` (`EmissionAnnoncePubliee`). Consommateur prévu : `notification-service` (US3).
+Producteur : `troc-service` (`EmissionAnnoncePubliee`). Consommateur : `notification-service`
+(`ConsommateurAnnoncePubliee`, US3, ADR 0025 : ack après commit, `basic.reject`, DLQ après 4 livraisons).
 
 ## Acheminement
 

@@ -3,8 +3,9 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { SessionService } from './compte/session.service';
 
 /**
- * En-tête commun (US1a, US2) : liens vers les écrans des annonces et des centres d’intérêt, membre connecté et
- * déconnexion. Reste visible en haut de la page au défilement. Affiché seulement pour un membre connecté.
+ * En-tête commun (US1a, US2, US3) : liens vers les annonces, les centres d’intérêt et les notifications (sans compteur
+ * avant US4), membre connecté et déconnexion. Reste visible en haut de la page au défilement. Affiché seulement pour
+ * un membre connecté.
  */
 @Component({
   imports: [RouterOutlet, RouterLink, RouterLinkActive],
@@ -24,6 +25,9 @@ import { SessionService } from './compte/session.service';
             </li>
             <li>
               <a routerLink="/centres-interet" routerLinkActive="actif" ariaCurrentWhenActive="page">Mes centres d’intérêt</a>
+            </li>
+            <li>
+              <a routerLink="/notifications" routerLinkActive="actif" ariaCurrentWhenActive="page">Mes notifications</a>
             </li>
           </ul>
           <div class="entete-compte">

@@ -54,7 +54,8 @@ Fonctionnalité: Consulter mes notifications et les marquer comme lues
 Évolution de la page **« Mes notifications »** (US3) :
 - notifications non lues mises en évidence (pas seulement par la couleur, RGAA) ;
 - bouton « Marquer comme lue » sur chaque notification non lue (`PATCH /notifications/{id}`) ;
-- le compteur de l'en-tête affiche le nombre de notifications **non lues**.
+- le compteur de l'en-tête affiche le nombre de notifications **non lues** (introduit ici et non en US3, décision du
+  06/11/2026).
 
 ## Notes
 

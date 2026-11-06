@@ -7,12 +7,16 @@ on:
     branches: [main]
     paths:
       - notification-service/**
+      # Topologie et droits RabbitMQ chargés par les tests (ADR 0026).
+      - deploy/scripts/rabbitmq-definitions.json
       - .github/workflows/notification-service.yml
       - .github/workflows/_service-java.yml
       - .github/workflows/_livraison.yml
   pull_request:
     paths:
       - notification-service/**
+      # Topologie et droits RabbitMQ chargés par les tests (ADR 0026).
+      - deploy/scripts/rabbitmq-definitions.json
       - .github/workflows/notification-service.yml
       - .github/workflows/_service-java.yml
       - .github/workflows/_livraison.yml

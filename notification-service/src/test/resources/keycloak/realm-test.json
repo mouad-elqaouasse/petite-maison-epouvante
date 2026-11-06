@@ -98,6 +98,16 @@
       "lastName": "Test",
       "realmRoles": ["USER"],
       "credentials": [{ "type": "password", "value": "bob", "temporary": false }]
+    },
+    {
+      "username": "carole",
+      "enabled": true,
+      "email": "carole@example.com",
+      "emailVerified": true,
+      "firstName": "Carole",
+      "lastName": "Test",
+      "realmRoles": ["USER"],
+      "credentials": [{ "type": "password", "value": "carole", "temporary": false }]
     }
   ]
 }

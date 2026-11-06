@@ -43,7 +43,8 @@ Les critères de la grille (E1…O2) sont indiqués entre crochets.
    - Services : resource servers Spring Security ; vérification signature (JWKS), `iss`, `aud` (mapper Keycloak), `exp` ;
      rôles du realm mappés en autorités ; RBAC (Role-Based Access Control) côté serveur via `@PreAuthorize`.
    - `issuer-uri` = URL publique de Keycloak, `jwk-set-uri` = URL interne du cluster.
-10. **RabbitMQ** : un compte par service au moindre privilège (troc : publication sur l'exchange ; notification : lecture de sa file et de la DLQ).
+10. **RabbitMQ** : un compte par service au moindre privilège (troc : publication sur l'exchange ; notification : lecture de sa
+    file seulement, la DLQ est lue par un administrateur ; modifié le 06/11/2026, ADR 0026).
 
 ### 1.3 Qualité et tests [Q1, Q2]
 11. **Indicateurs** :
