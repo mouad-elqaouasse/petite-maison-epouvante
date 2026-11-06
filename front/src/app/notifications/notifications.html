@@ -1,0 +1,48 @@
+<main class="page">
+  <section class="notifications" aria-labelledby="titre-notifications">
+    <div class="notifications-tete">
+      <h1 id="titre-notifications" class="titre-ecran">Mes notifications</h1>
+      @if (etat().etat === 'chargee') {
+        <button type="button" class="bouton-secondaire" (click)="charger()">Actualiser</button>
+      }
+    </div>
+    <p class="aide">Confirmations de vos publications et nouvelles annonces des catégories que vous suivez.</p>
+
+    @let liste = etat();
+    @switch (liste.etat) {
+      @case ('chargement') {
+        <p class="attente" role="status">Chargement des notifications…</p>
+      }
+      @case ('erreur') {
+        <div class="champ-indisponible">
+          <p class="erreur" role="alert">Vos notifications n’ont pas pu être chargées.</p>
+          <button type="button" class="bouton-secondaire" (click)="charger()">Réessayer</button>
+        </div>
+      }
+      @case ('chargee') {
+        @if (liste.notifications.length === 0) {
+          <div class="notifications-vide">
+            <p>Aucune notification pour l’instant.</p>
+            <p class="aide">Suivez des catégories pour être prévenu des nouvelles annonces.</p>
+            <a class="bouton-secondaire" routerLink="/centres-interet">Choisir mes centres d’intérêt</a>
+          </div>
+        } @else {
+          <ul class="notifications-liste">
+            @for (notification of liste.notifications; track notification.annonceId + notification.type) {
+              <li class="notification">
+                <p class="notification-tete">
+                  <span class="notification-type" [class.notification-alerte]="notification.type === 'ALERTE'">{{
+                    type(notification.type)
+                  }}</span>
+                  <time [attr.datetime]="notification.creeLe">{{ date(notification.creeLe) }}</time>
+                </p>
+                <p class="notification-texte">{{ notification.texte }}</p>
+                <p class="notification-annonce">{{ notification.titreAnnonce }}</p>
+              </li>
+            }
+          </ul>
+        }
+      }
+    }
+  </section>
+</main>

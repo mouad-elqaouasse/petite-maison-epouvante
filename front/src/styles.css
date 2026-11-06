@@ -324,6 +324,20 @@ html {
   }
 }
 
+/* US3 : quatre liens ne tiennent plus sur une ligne à 375 px ; grille de deux colonnes sur toute la largeur, cibles
+   tactiles de 44 px. */
+@media (max-width: 47.99rem) {
+  .entete-liens {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .entete-liens a {
+    min-height: 2.75rem;
+  }
+}
+
 @media (max-width: 30rem) {
   .entete-membre {
     display: none;
@@ -845,4 +859,101 @@ html {
 
 .centres-message-erreur {
   color: var(--sang-texte);
+}
+
+/* US3 — Mes notifications : même colonne que les centres d'intérêt ; une notification par ligne, séparées par un
+   filet, lues de gauche à droite. Le type est un badge : contour pour une confirmation, plein pour une alerte. */
+.notifications {
+  max-width: 34rem;
+  margin: 0 auto;
+}
+
+.notifications-tete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+/* Le bouton secondaire a une marge haute pour suivre un texte ; ici il est à côté du titre. */
+.notifications-tete .bouton-secondaire {
+  margin-top: 0;
+}
+
+.notifications-tete + .aide {
+  margin-top: 0.5rem;
+  text-align: left;
+}
+
+.notifications-liste {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+  border-top: 1px solid var(--filet);
+}
+
+.notification {
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--filet);
+}
+
+.notification p {
+  margin: 0;
+}
+
+.notification-tete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.notification-tete time {
+  color: var(--texte-secondaire);
+  font-size: 0.9375rem;
+}
+
+.notification-type {
+  padding: 0.125rem 0.625rem;
+  border: 1px solid var(--creme);
+  border-radius: 2px;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.notification-alerte {
+  background: var(--creme);
+  color: var(--nuit);
+}
+
+.notification-texte {
+  font-weight: 700;
+}
+
+.notification-annonce {
+  color: var(--texte-secondaire);
+}
+
+.notifications-vide {
+  padding: 2rem 0;
+  border-top: 1px solid var(--filet);
+}
+
+.notifications-vide p:first-child {
+  margin: 0 0 0.5rem;
+  font-family: var(--police-titre);
+  font-size: 2.75rem;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.notifications-vide .bouton-secondaire {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
 }

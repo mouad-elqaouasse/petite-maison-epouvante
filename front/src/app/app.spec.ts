@@ -22,6 +22,7 @@ describe('App (en-tête)', () => {
           { path: 'annonces', component: Vide },
           { path: 'annonces/nouvelle', component: Vide },
           { path: 'centres-interet', component: Vide },
+          { path: 'notifications', component: Vide },
         ]),
         { provide: SessionService, useValue: session },
       ],
@@ -56,6 +57,15 @@ describe('App (en-tête)', () => {
     const lien = [...page.querySelectorAll('nav a')].find((a) => a.textContent?.trim() === 'Mes centres d’intérêt');
 
     expect(lien?.getAttribute('href')).toBe('/centres-interet');
+    expect(lien?.getAttribute('aria-current')).toBe('page');
+  });
+
+  // US3 : lien vers « Mes notifications », sans compteur (il arrive avec le marquage « lue », US4).
+  it('mène à « Mes notifications », sans compteur, marqué comme page courante', async () => {
+    const page = await afficher('/notifications');
+    const lien = [...page.querySelectorAll('nav a')].find((a) => a.getAttribute('href') === '/notifications');
+
+    expect(lien?.textContent?.trim()).toBe('Mes notifications');
     expect(lien?.getAttribute('aria-current')).toBe('page');
   });
 
