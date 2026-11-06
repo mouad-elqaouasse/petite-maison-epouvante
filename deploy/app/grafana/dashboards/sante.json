@@ -1,7 +1,7 @@
 {
   "uid": "sante",
   "title": "Santé",
-  "description": "docs/cadrage.md §1.4.16 : cibles, indicateur 4 (5xx et DLQ), redémarrages, JVM, files RabbitMQ. Version squelette (SQ-07) : la latence p95 de POST /annonces (indicateur 3) arrive avec les user stories.",
+  "description": "docs/cadrage.md §1.4.16 : cibles, indicateur 4 (5xx et DLQ), redémarrages, JVM, files RabbitMQ. Version squelette (SQ-07) : la latence p95 de POST /annonces (indicateur 3) arrive avec les user stories. US3 : événements AnnoncePubliee traités et rejetés.",
   "tags": [
     "app",
     "sante"
@@ -542,6 +542,85 @@
             "showPoints": "never",
             "lineInterpolation": "linear"
           }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Événements AnnoncePubliee (par 5 min)",
+      "description": "US3, ADR 0025 : événements traités (ack après commit), livraisons rejetées (basic.reject, DLQ après 4), notifications créées par type ; échecs d'émission côté troc-service (ADR 0020).",
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(notification_annonces_publiees_traitees_total[5m]))",
+          "legendFormat": "traités"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(notification_annonces_publiees_rejets_total[5m]))",
+          "legendFormat": "livraisons rejetées"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (type) (increase(notifications_creees_total[5m]))",
+          "legendFormat": "notifications {{type}}"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(annonces_publiees_emission_echecs_total[5m]))",
+          "legendFormat": "échecs d'émission (troc)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "lineInterpolation": "linear"
+          },
+          "decimals": 0
         },
         "overrides": []
       },
