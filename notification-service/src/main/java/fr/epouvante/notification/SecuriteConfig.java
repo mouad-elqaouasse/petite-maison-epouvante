@@ -38,8 +38,10 @@ class SecuriteConfig {
                         // sans jeton ; sur le port de l'API, tout autre chemin reste un 404.
                         .anyRequest().permitAll())
                 .oauth2ResourceServer(rs -> rs.jwt(jwt -> jwt.jwtAuthenticationConverter(conversion())))
-                // Protection CSRF laissée active : le resource server l'ignore déjà pour les requêtes porteuses d'un
-                // jeton Bearer (aucun cookie de session à détourner) et la garde pour toute autre requête.
+                // CSRF ignoré sur /api/** (US2, ADR 0023 point 2) : l'API n'accepte que des jetons Bearer, sans session
+                // ni cookie, il n'y a rien à détourner. Active, la protection répondait 403 à un PUT sans jeton, avant
+                // l'authentification, au lieu du 401 attendu (« Gérer ses catégories sans jeton est refusé »).
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
         return http.build();
     }

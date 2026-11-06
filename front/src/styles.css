@@ -803,3 +803,46 @@ html {
     border-right-color: transparent;
   }
 }
+
+/* US2 — Mes centres d'intérêt : même colonne et même panneau que le formulaire de publication, une case par ligne. */
+.centres {
+  max-width: 34rem;
+  margin: 0 auto;
+}
+
+.centres-liste legend {
+  padding: 0;
+  font-weight: 700;
+}
+
+.centres-cases {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.centres-cases .choix-option + .choix-option {
+  border-top: 1px solid var(--filet);
+}
+
+/* Cases sombres quand elles ne sont pas cochées (rendu natif clair sinon), rouge une fois cochées. */
+.centres-cases .choix-option input {
+  color-scheme: dark;
+}
+
+.centres-cases .choix-option input[aria-busy="true"] {
+  cursor: progress;
+}
+
+.centres-message {
+  min-height: 1.5rem;
+  margin: 1rem 0;
+  font-weight: 700;
+  text-align: left;
+}
+
+.centres-message-erreur {
+  color: var(--sang-texte);
+}

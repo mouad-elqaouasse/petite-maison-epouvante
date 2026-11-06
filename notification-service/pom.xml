@@ -23,6 +23,7 @@
         <!-- 5.30.0 imposée par Spring Boot 4.1.2 : CVE-2026-63337, -69219, -69220 et -75516 (HIGH, Trivy),
              corrigées en 5.34.0. À retirer quand Spring Boot embarquera une version corrigée. -->
         <rabbit-amqp-client.version>5.34.0</rabbit-amqp-client.version>
+        <rest-assured.version>6.3.0</rest-assured.version>
     </properties>
 
     <dependencies>
@@ -96,6 +97,14 @@
         <dependency>
             <groupId>org.awaitility</groupId>
             <artifactId>awaitility</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- US2 : tests d'acceptation par l'API, en boîte noire (docs/cadrage.md §1.3.12). Version non gérée par
+             Spring Boot 4.1. -->
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>rest-assured</artifactId>
+            <version>${rest-assured.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

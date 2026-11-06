@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { Accueil } from './accueil/accueil';
 import { ListeAnnonces } from './annonces/liste-annonces';
 import { PublierAnnonce } from './annonces/publier-annonce';
+import { CentresInteret } from './centres-interet/centres-interet';
 import { connexionGuard } from './compte/connexion.guard';
 
 export const routes: Routes = [
@@ -13,6 +14,13 @@ export const routes: Routes = [
     component: PublierAnnonce,
     canActivate: [connexionGuard],
     title: 'Publier une annonce — La Petite Maison de l’Épouvante',
+  },
+  // US2 : catégories suivies du membre connecté.
+  {
+    path: 'centres-interet',
+    component: CentresInteret,
+    canActivate: [connexionGuard],
+    title: 'Mes centres d’intérêt — La Petite Maison de l’Épouvante',
   },
   { path: '**', redirectTo: '' },
 ];

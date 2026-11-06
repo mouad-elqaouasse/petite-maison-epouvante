@@ -1,0 +1,49 @@
+<main class="page">
+  <section class="centres" aria-labelledby="titre-centres">
+    <h1 id="titre-centres" class="titre-ecran">Mes centres d’intérêt</h1>
+    <p class="aide">Cochez les catégories dont vous voulez être prévenu quand une annonce est publiée.</p>
+
+    @let etat = page();
+    @switch (etat.etat) {
+      @case ('chargement') {
+        <p class="attente">Chargement des catégories…</p>
+      }
+      @case ('erreur') {
+        <div class="champ-indisponible">
+          <p class="erreur" role="alert">Vos centres d’intérêt n’ont pas pu être chargés.</p>
+          <button type="button" class="bouton-secondaire" (click)="charger()">Réessayer</button>
+        </div>
+      }
+      @case ('pret') {
+        <fieldset class="formulaire centres-liste" aria-describedby="centres-etat">
+          <legend>Catégories suivies</legend>
+          <p id="centres-etat" class="champ-aide">
+            @if (suivies().size === 0) {
+              Vous ne suivez aucune catégorie pour l’instant.
+            } @else {
+              Chaque case est enregistrée dès que vous la cochez ou la décochez.
+            }
+          </p>
+          <ul class="centres-cases">
+            @for (categorie of etat.categories; track categorie; let i = $index) {
+              <li class="choix-option">
+                <input
+                  type="checkbox"
+                  [id]="'centre-' + i"
+                  [checked]="suivies().has(categorie)"
+                  [attr.aria-busy]="enCours().has(categorie) ? 'true' : null"
+                  (click)="cliquer($event, categorie)"
+                />
+                <label [for]="'centre-' + i">{{ categorie }}</label>
+              </li>
+            }
+          </ul>
+        </fieldset>
+      }
+    }
+
+    <!-- Toujours présente pour que les lecteurs d'écran annoncent chaque changement. -->
+    @let annonce = message();
+    <p class="centres-message" [class.centres-message-erreur]="annonce?.erreur" aria-live="polite">{{ annonce?.texte }}</p>
+  </section>
+</main>
