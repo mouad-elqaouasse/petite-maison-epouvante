@@ -1,0 +1,87 @@
+# Tests E2E (SQ-14, ADR 0027) : toute l'application dans Docker Compose (e2e/compose.yaml), parcours Playwright et
+# axe-core à 375 et 1280 px. Appelé par la chaîne de chaque composant entre l'image et la livraison : le composant
+# testé avec son image, les autres à leur tag déployé (deploy/app/<composant>/kustomization.yaml).
+# Sur main : l'image testée est celle poussée sur GHCR (tag SHA), et le commit newTag n'a lieu que si ce job est vert.
+# Sur une PR (rien n'est poussé) : l'image construite arrive par un artefact du même run (docker save).
+name: _e2e
+
+on:
+  workflow_call:
+    inputs:
+      composant:
+        description: "Composant testé (troc-service, notification-service, front) ; vide : tous à leur tag déployé"
+        required: false
+        type: string
+        default: ""
+      image:
+        description: "Image du composant testé (registre/nom:tag)"
+        required: false
+        type: string
+        default: ""
+      artefact:
+        description: "Artefact contenant l'image (docker save), sur une PR ; vide : image tirée de GHCR"
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Image de la PR (artefact du run)
+        if: inputs.artefact != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ inputs.artefact }}
+          path: /tmp/image
+
+      - name: Chargement de l'image de la PR
+        if: inputs.artefact != ''
+        run: docker load --input /tmp/image/image.tar
+
+      - name: Préparation de la pile (certificat, realm et définitions de test, images)
+        env:
+          COMPOSANT: ${{ inputs.composant }}
+          IMAGE: ${{ inputs.image }}
+        run: |
+          case "$COMPOSANT" in
+            troc-service) export IMAGE_TROC="$IMAGE" ;;
+            notification-service) export IMAGE_NOTIFICATION="$IMAGE" ;;
+            front) export IMAGE_FRONT="$IMAGE" ;;
+            "") ;;
+            *) echo "::error::Composant inconnu : $COMPOSANT"; exit 1 ;;
+          esac
+          python3 e2e/preparer.py | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Démarrage de la pile
+        run: |
+          debut=$(date +%s)
+          docker compose -f e2e/compose.yaml --env-file e2e/genere/.env up -d --wait --wait-timeout 300
+          echo "Pile prête en $(( $(date +%s) - debut )) s" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Parcours Playwright et axe-core (bloquant)
+        env:
+          CI: "true"
+        run: docker compose -f e2e/compose.yaml --env-file e2e/genere/.env run --rm playwright
+
+      - name: Journaux de la pile (en cas d'échec)
+        if: failure()
+        run: docker compose -f e2e/compose.yaml --env-file e2e/genere/.env logs --no-color --tail 200
+
+      - name: Captures, rapports axe-core et rapport Playwright
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-${{ inputs.composant || 'tags-deployes' }}
+          path: e2e/tests/resultats/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Arrêt de la pile
+        if: always()
+        run: docker compose -f e2e/compose.yaml --env-file e2e/genere/.env down --volumes
