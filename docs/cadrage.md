@@ -261,3 +261,10 @@ Namespace `sandbox`, supprimé après usage, jamais en même temps que `app` si 
 - PostgreSQL en Deployment : deux pods possibles sur le même volume après `kubectl delete pod`, et `fsGroup` réappliqué
   à toute la base à chaque montage → StatefulSet et `fsGroupChangePolicy: OnRootMismatch`, comme RabbitMQ (ADR 0018).
 - Historique de Prometheus en `emptyDir`, perdu à chaque recréation du pod → volume persistant (environ 200 Mo).
+- SSH du VPS : `PasswordAuthentication yes` (relevé le 21/11/2026, `sshd -T` ; `PermitRootLogin no`), des tentatives par
+  mot de passe arrivent dans les journaux → n'accepter que les clés (`PasswordAuthentication no`), éventuellement fail2ban.
+
+## 9. À faire avant les campagnes de charge
+- Alerte « RAM disponible du nœud < 500 Mio » (Prometheus, avec les 3 alertes prévues) : le 10/11/2026, une pression
+  mémoire a figé le nœud environ 3 min (sondes en échec, Keycloak et Grafana redémarrés par SIGTERM, aucun `OOMKilled`) ;
+  cause non retrouvée, historique de Prometheus limité à 2 jours (ajouté le 21/11/2026).

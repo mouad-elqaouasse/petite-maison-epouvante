@@ -1,0 +1,50 @@
+US3 — démonstration de résilience sur le VPS (namespace app), 06/11/2026
+Décision D6 (docs/backlog/US3-notifier-nouvelle-annonce.md, précisions) ; ADR 0025 et 0026.
+Scénario : notification-service arrêté (Flux suspendu, replicas 0), annonce publiée par membre-demo dans l'interface
+(catégorie « Jeux de société », suivie par abonne-demo), message en attente dans la file, redémarrage du service,
+notifications créées (CONFIRMATION pour l'auteur, ALERTE pour l'abonné), file vidée, DLQ vide, Flux réactivé.
+
+=== 1. Arrêt du service (Flux suspendu, notification-service à 0) ===
+2026-11-06T15:35:23Z
+kustomization.kustomize.toolkit.fluxcd.io/app patched
+deployment.apps/notification-service scaled
+pod/notification-service-597c4f548f-bkssc condition met
+suspend=true
+NAME                   READY   UP-TO-DATE   AVAILABLE   AGE
+notification-service   0/0     0            0           7d
+rabbitmq_queue_messages{vhost="/",queue="notification.annonce-publiee"} 0
+rabbitmq_queue_consumers{vhost="/",queue="notification.annonce-publiee"} 0
+
+=== 2. Après la publication par membre-demo (service arrêté) : 1 message en attente, 0 consommateur ===
+2026-11-06T15:51:12Z
+NAME                   READY   UP-TO-DATE   AVAILABLE   AGE
+notification-service   0/0     0            0           7d
+rabbitmq_queue_messages_ready{vhost="/",queue="notification.annonce-publiee.dlq"} 0
+rabbitmq_queue_messages_ready{vhost="/",queue="notification.annonce-publiee"} 1
+rabbitmq_queue_messages{vhost="/",queue="notification.annonce-publiee.dlq"} 0
+rabbitmq_queue_messages{vhost="/",queue="notification.annonce-publiee"} 1
+rabbitmq_queue_consumers{vhost="/",queue="notification.annonce-publiee.dlq"} 0
+rabbitmq_queue_consumers{vhost="/",queue="notification.annonce-publiee"} 0
+1103f37e-fedd-46d3-8b38-18f1aff66f07|JEUX_DE_SOCIETE|Jeu de société « Horreur à Arkham »|2026-11-06 15:50:45.475543+00
+2026-11-06T15:50:45.503Z  INFO 1 --- [troc-service] [nio-8080-exec-4] f.e.troc.annonce.EmissionAnnoncePubliee  : AnnoncePubliee émis pour l'annonce 1103f37e-fedd-46d3-8b38-18f1aff66f07 (correlationId b765adc9-ede7-49a0-9a20-e964a33012a6)
+
+=== 3. Relance du service et réactivation de Flux ===
+2026-11-06T15:51:21Z
+deployment.apps/notification-service scaled
+kustomization.kustomize.toolkit.fluxcd.io/app patched
+Waiting for deployment "notification-service" rollout to finish: 0 of 1 updated replicas are available...
+deployment "notification-service" successfully rolled out
+2026-11-06T15:52:25Z
+
+=== 4. Après la relance : notifications créées, file vide, DLQ vide, Flux réactivé ===
+2026-11-06T15:52:32Z
+NAME                                    READY   STATUS    RESTARTS   AGE
+notification-service-597c4f548f-g7x5b   1/1     Running   0          72s
+suspend=false revision=main@sha1:b49dc85e9508820e49f2340ee227fd85326f8d56 pret=True
+rabbitmq_queue_messages{vhost="/",queue="notification.annonce-publiee.dlq"} 0
+rabbitmq_queue_messages{vhost="/",queue="notification.annonce-publiee"} 0
+rabbitmq_queue_consumers{vhost="/",queue="notification.annonce-publiee.dlq"} 0
+rabbitmq_queue_consumers{vhost="/",queue="notification.annonce-publiee"} 1
+878fdc76|ALERTE|Jeu de société « Horreur à Arkham »|2026-11-06 15:52:22.579204+00
+71e6e0ee|CONFIRMATION|Jeu de société « Horreur à Arkham »|2026-11-06 15:52:22.579204+00
+2026-11-06T15:52:22.818Z  INFO 1 --- [notification-service] [oncesPubliees-1] f.e.n.n.ConsommateurAnnoncePubliee       : AnnoncePubliee 1103f37e-fedd-46d3-8b38-18f1aff66f07 traité : 2 notification(s) créée(s) (correlationId b765adc9-ede7-49a0-9a20-e964a33012a6)

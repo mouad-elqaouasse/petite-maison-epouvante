@@ -24,6 +24,23 @@ principaux dans un vrai navigateur, avec un contrôle d'accessibilité.
 - Faux stockage des photos : les URL factices sont servies par une route Playwright (comme la vérification locale d'US1a,
   `docs/soutenance/captures/us1a/`), aucun appel au vrai Cloudinary.
 
+## Décisions (validées le 21/11/2026, ADR 0027)
+
+- **D1** : un workflow par composant, sans refonte. build → tests → image → Trivy → push GHCR → E2E (`_e2e.yml`) avec
+  cette image, les autres composants à leur tag déployé → commit `newTag` seulement si l'E2E est vert. Sur une PR,
+  l'image passe par un artefact du run. `e2e.yml` teste les tags déployés quand seuls `e2e/` ou `_e2e.yml` changent.
+- **D2** : adresses de la prod dans le navigateur, portées par la passerelle Traefik (alias réseau, certificat
+  auto-signé) : l'image publiée du front est testée telle quelle, CSP comprise.
+- **D3** : realm de test généré depuis `deploy/app/keycloak/realm-epouvante.json`, comptes `e2e-auteur` et `e2e-abonne`.
+- **D4** : base des URL factices réglable dans `troc-service` (`app.photo-factice.url-base`), réglée sur
+  `res.cloudinary.com` et servie par une route Playwright.
+- **D5** : parcours 2 dans deux navigateurs (abonné et auteur), « Actualiser » pendant 30 s au plus.
+- **D6** : contrôle requis par la protection de `main` reporté à SQ-11, après la migration du dépôt.
+- **D7** : E2E sur chaque PR concernée et sur `main` avant le tag.
+- **D8** : test cassé prouvé sur la branche de la PR (commit, puis commit de retour), sans réécriture d'historique.
+- Limite (conséquence de D1) : un changement entre composants doit rester compatible avec la version déployée de
+  l'autre composant (back livré avant le front).
+
 ## Vérification
 
 - Un test volontairement cassé (libellé de bouton modifié) fait échouer le job ; la publication n'a pas lieu.
