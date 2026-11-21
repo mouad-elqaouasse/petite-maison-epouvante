@@ -1,0 +1,12 @@
+{
+  "name": "epouvante-e2e",
+  "private": true,
+  "description": "SQ-14 : parcours E2E (Playwright + axe-core) sur la pile e2e/compose.yaml",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.11.0",
+    "@playwright/test": "1.57.0"
+  }
+}
