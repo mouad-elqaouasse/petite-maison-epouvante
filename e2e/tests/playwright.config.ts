@@ -18,6 +18,8 @@ export default defineConfig({
     ignoreHTTPSErrors: true,
     locale: 'fr-FR',
     timezoneId: 'Europe/Paris',
+    // Un élément absent fait échouer l'action en 15 s, pas à la limite du test (2 min) : relevé avec la preuve D8.
+    actionTimeout: 15_000,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
