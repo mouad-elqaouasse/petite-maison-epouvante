@@ -1,0 +1,34 @@
+# SQ-14 — Routage de la passerelle E2E, copie des Ingress du cluster (ADR 0006) : un hôte pour l'application, un pour
+# Keycloak (seulement le realm et ses ressources). TLS par le certificat auto-signé de e2e/preparer.py.
+http:
+  routers:
+    front:
+      rule: Host(`epouvante.menuly-app.com`)
+      priority: 1
+      service: front
+      tls: {}
+    troc:
+      rule: Host(`epouvante.menuly-app.com`) && PathPrefix(`/api/troc`)
+      service: troc
+      tls: {}
+    notification:
+      rule: Host(`epouvante.menuly-app.com`) && PathPrefix(`/api/notifications`)
+      service: notification
+      tls: {}
+    keycloak:
+      rule: Host(`auth.epouvante.menuly-app.com`) && (PathPrefix(`/realms/epouvante`) || PathPrefix(`/resources`))
+      service: keycloak
+      tls: {}
+  services:
+    front:
+      loadBalancer: { servers: [{ url: http://front:8080 }] }
+    troc:
+      loadBalancer: { servers: [{ url: http://troc-service:8080 }] }
+    notification:
+      loadBalancer: { servers: [{ url: http://notification-service:8080 }] }
+    keycloak:
+      loadBalancer: { servers: [{ url: http://keycloak:8080 }] }
+tls:
+  certificates:
+    - certFile: /certs/certificat.pem
+      keyFile: /certs/cle.pem

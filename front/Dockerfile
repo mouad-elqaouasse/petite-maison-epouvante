@@ -18,6 +18,13 @@ LABEL org.opencontainers.image.source="https://github.com/mouad-elqaouasse/petit
 USER 0
 RUN apk upgrade --no-cache \
  && apk del --no-cache curl
+# nginx 1.30.7 (CVE-2026-113425, -121810, -123007, -123633 critiques ; -118899, -123634 hautes) : pas encore d'image
+# nginx-unprivileged 1.30.7 le 21/11/2026. Paquets du dépôt nginx.org (même build que l'image, branche stable, clé
+# déjà présente dans /etc/apk/keys), épinglés comme dans l'image. À RETIRER dès que l'image
+# nginxinc/nginx-unprivileged:1.30.7-alpine3.24 sort : remplacer la ligne FROM et supprimer ce RUN.
+RUN apk add --no-cache --repository https://nginx.org/packages/alpine/v3.24/main \
+      "nginx=1.30.7-r1" "nginx-module-geoip=1.30.7-r1" "nginx-module-image-filter=1.30.7-r1" \
+      "nginx-module-xslt=1.30.7-r1" "nginx-module-njs~1.30.7"
 COPY nginx/nginx.conf /etc/nginx/nginx.conf
 COPY nginx/entetes-securite.conf /etc/nginx/entetes-securite.conf
 COPY --from=build /src/dist/front/browser /usr/share/nginx/html

@@ -1,5 +1,6 @@
 # Chaîne commune des services Java (ADR 0009), appelée par un workflow par composant filtré par chemin :
-# tests → Trivy fs → image → Trivy image → push GHCR (main) → livraison (_livraison.yml : tag dans deploy/app/, vérification HTTPS).
+# tests → Trivy fs → image → Trivy image → push GHCR (main) → E2E (_e2e.yml, SQ-14) → livraison (_livraison.yml : tag dans
+# deploy/app/, vérification HTTPS), seulement si l'E2E est vert (ADR 0027).
 # On construit une fois : l'image poussée est celle qui a été scannée, dans le même job (docs/cadrage.md §1.3.12).
 name: _service-java
 
@@ -76,6 +77,18 @@ jobs:
           exit-code: "1"
           format: table
 
+      # PR : rien n'est poussé ; l'image testée par l'E2E passe par un artefact du run (ADR 0027).
+      - name: Image pour l'E2E (PR)
+        if: github.event_name == 'pull_request'
+        run: docker save --output /tmp/image.tar "$IMAGE:$GITHUB_SHA"
+
+      - if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-${{ inputs.composant }}
+          path: /tmp/image.tar
+          retention-days: 1
+
       - if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
@@ -90,9 +103,21 @@ jobs:
           digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE:$GITHUB_SHA")
           echo "Image poussée : \`$digest\`" >> "$GITHUB_STEP_SUMMARY"
 
-  # Tag et vérification en ligne : chaîne commune à tous les composants (_livraison.yml).
-  livraison:
+  # E2E avec cette image, les autres composants à leur tag déployé (SQ-14, ADR 0027) : sur main, l'image poussée sur
+  # GHCR ; sur une PR, l'artefact du run.
+  e2e:
     needs: construire
+    permissions:
+      contents: read
+    uses: ./.github/workflows/_e2e.yml
+    with:
+      composant: ${{ inputs.composant }}
+      image: ghcr.io/mouad-elqaouasse/petite-maison-epouvante/${{ inputs.composant }}:${{ github.sha }}
+      artefact: ${{ github.event_name == 'pull_request' && format('image-{0}', inputs.composant) || '' }}
+
+  # Tag et vérification en ligne : chaîne commune à tous les composants (_livraison.yml), seulement si l'E2E est vert.
+  livraison:
+    needs: [construire, e2e]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     permissions:
       contents: write
