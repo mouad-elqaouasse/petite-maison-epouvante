@@ -48,7 +48,9 @@ import io.restassured.response.ValidatableResponse;
             "app.cloudinary.cloud-name=nuage-test",
             "app.cloudinary.api-key=cle-de-test-123",
             "app.cloudinary.api-secret=secret-de-test-456",
-            "app.cloudinary.delai-lecture=1s"
+            // 2 s : sous charge (conteneurs en parallèle, préchauffage), 1 s laissait parfois expirer une réponse
+            // immédiate de WireMock (test instable, SQ-14).
+            "app.cloudinary.delai-lecture=2s"
         })
 class CloudinaryAcceptationTest {
 
@@ -59,6 +61,8 @@ class CloudinaryAcceptationTest {
 
     private static final String UPLOAD = "/v1_1/nuage-test/image/upload";
     private static final String MESSAGE_CLOUDINARY = "Invalid api_key cle-de-test-123";
+    // Réponse de Cloudinary plus lente que le délai de lecture (2 s), mais terminée avant la fin du test (isolation).
+    private static final Duration LENTEUR = Duration.ofSeconds(4);
 
     @DynamicPropertySource
     static void proprietes(DynamicPropertyRegistry proprietes) {
@@ -138,14 +142,29 @@ class CloudinaryAcceptationTest {
 
     @Test
     @DisplayName("Un Cloudinary trop lent fait échouer la publication sans bloquer le service")
-    void un_cloudinary_trop_lent_fait_echouer_la_publication_sans_bloquer_le_service() {
-        CLOUDINARY.stubFor(post(UPLOAD).willReturn(okJson("{}").withFixedDelay(10_000)));
+    void un_cloudinary_trop_lent_fait_echouer_la_publication_sans_bloquer_le_service() throws InterruptedException {
+        CLOUDINARY.stubFor(post(UPLOAD).willReturn(okJson("{}").withFixedDelay((int) LENTEUR.toMillis())));
+        // Préchauffage hors mesure (SQ-14) : la première requête authentifiée lit les clés de Keycloak, ce qui prenait
+        // jusqu'à 3,5 s sur une machine chargée et faisait dépasser les 5 s sans rapport avec Cloudinary.
+        given().baseUri("http://localhost:" + port).basePath("/api/troc").auth().oauth2(alice)
+                .get("/categories").then().statusCode(200);
 
         long debut = System.nanoTime();
         publier(Photos.jpeg(150 * Photos.KO), "jason.jpg", "image/jpeg").statusCode(greaterThanOrEqualTo(500));
 
         assertThat(Duration.ofNanos(System.nanoTime() - debut)).isLessThan(Duration.ofSeconds(5));
         assertThat(annoncesEnregistrees()).isZero();
+
+        // Isolation (SQ-14) : la réponse retardée reste ouverte côté WireMock après l'abandon du service. Sans attendre
+        // sa fin, elle perturbait le test suivant (requêtes en double, enregistrées après la réinitialisation de WireMock).
+        attendreLaFinDeLaReponseRetardee(debut);
+    }
+
+    private static void attendreLaFinDeLaReponseRetardee(long debut) throws InterruptedException {
+        Duration reste = LENTEUR.plusMillis(500).minus(Duration.ofNanos(System.nanoTime() - debut));
+        if (!reste.isNegative()) {
+            Thread.sleep(reste);
+        }
     }
 
     @Test
