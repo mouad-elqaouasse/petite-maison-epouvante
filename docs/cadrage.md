@@ -268,3 +268,9 @@ Namespace `sandbox`, supprimé après usage, jamais en même temps que `app` si 
 - Alerte « RAM disponible du nœud < 500 Mio » (Prometheus, avec les 3 alertes prévues) : le 10/11/2026, une pression
   mémoire a figé le nœud environ 3 min (sondes en échec, Keycloak et Grafana redémarrés par SIGTERM, aucun `OOMKilled`) ;
   cause non retrouvée, historique de Prometheus limité à 2 jours (ajouté le 21/11/2026).
+
+## 10. À faire avant la soutenance
+- La veille, relancer la CI de chaque service pour que les caches soient frais : GitHub supprime un cache resté 7 jours
+  sans accès, et un build sans cache peut recevoir un 429 de Maven Central (deux fois le 21/11/2026). Relancer un run de
+  **PR** (aucune publication ni livraison), pas un run `push` de `main` déjà livré : il repousserait l'image sur le même
+  tag SHA, puis le job `tag` échouerait, faute de changement à commiter (décision du 23/11/2026).
