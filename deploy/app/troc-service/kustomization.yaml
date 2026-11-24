@@ -5,6 +5,7 @@ namespace: app
 resources:
   - troc-service.yaml
   - ingress.yaml
+  - hpa.yaml
 images:
   - name: ghcr.io/mouad-elqaouasse/petite-maison-epouvante/troc-service
     newTag: "52c485f6bffd451bc755eaebbfdcc835bbab9b9e"
