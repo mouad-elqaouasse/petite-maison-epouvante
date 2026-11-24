@@ -25,3 +25,7 @@ docs/sujet/
 # Configuration Claude Code (non publiée)
 CLAUDE.md
 .claude/
+
+# Campagnes de charge : secret du client Keycloak et résultats JMeter (load/README.md)
+load/charge.properties
+load/resultats/
