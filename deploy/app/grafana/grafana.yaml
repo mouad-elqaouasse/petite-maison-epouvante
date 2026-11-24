@@ -1,6 +1,7 @@
 # Grafana 13.3.0 (version de l'exp. 1). Accessible par tunnel seulement : aucun Ingress ne le cite.
 #   ssh -t -o ExitOnForwardFailure=yes -L 3000:localhost:3000 ubuntu@51.178.39.218 'kubectl -n app port-forward svc/grafana 3000:3000'
-# Mot de passe administrateur dans le Secret grafana-admin, généré sur le VPS par deploy/scripts/grafana-secrets.sh (ADR 0008).
+# Lecture anonyme (Viewer, ADR 0028) ; administration avec le mot de passe du Secret grafana-admin, généré sur le VPS
+# par deploy/scripts/grafana-secrets.sh (ADR 0008).
 # Source de données et tableaux de bord provisionnés depuis le dépôt, en lecture seule dans Grafana ; base interne en
 # emptyDir : rien d'autre n'est à conserver.
 apiVersion: apps/v1
@@ -46,6 +47,12 @@ spec:
                 secretKeyRef:
                   name: grafana-admin
                   key: password
+            # Lecture anonyme (rôle Viewer, ADR 0028) : Grafana n'est joignable que par le tunnel (Service ClusterIP,
+            # aucun Ingress, aucune entrée réseau autorisée vers le pod) ; captures des campagnes sans mot de passe.
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "true"
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: Viewer
             # Sans ce réglage, Grafana télécharge ~430 Mo de plugins à chaque démarrage (exp. 1, partie 2, étape K).
             - name: GF_PLUGINS_PREINSTALL_DISABLED
               value: "true"
