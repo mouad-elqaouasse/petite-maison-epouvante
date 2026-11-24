@@ -42,6 +42,9 @@ spec:
               containerPort: 8081
           # Base notification avec le rôle notification ; mot de passe lu dans le Secret notification-db (SQ-04, ADR 0008).
           env:
+            # Remplace la valeur de l'image : heap 128 Mio, environ 177 Mio hors heap mesurés le 24/11/2026, limite 320 Mio.
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:MaxRAMPercentage=40 -XX:+ExitOnOutOfMemoryError"
             - name: SPRING_DATASOURCE_URL
               value: jdbc:postgresql://postgresql:5432/notification
             - name: SPRING_DATASOURCE_USERNAME
@@ -66,7 +69,7 @@ spec:
               value: https://auth.epouvante.menuly-app.com/realms/epouvante
             - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
               value: http://keycloak:8080/realms/epouvante/protocol/openid-connect/certs
-          # Budget RAM : 256 / 320 Mio (docs/cadrage.md §1.4.18) ; JVM à 75 % de la limite (Dockerfile).
+          # Budget RAM : 256 / 320 Mio (docs/cadrage.md §1.4.18) ; JVM à 40 % de la limite (JAVA_TOOL_OPTIONS ci-dessus).
           resources:
             requests:
               cpu: 50m

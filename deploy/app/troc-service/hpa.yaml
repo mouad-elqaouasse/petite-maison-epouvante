@@ -1,0 +1,22 @@
+# HPA de troc-service : 1 à 3 replicas, cible 50 % du CPU demandé (docs/cadrage.md §1.4.17, ADR 0005).
+# Fenêtres de stabilisation par défaut : montée immédiate, descente après 300 s (exp. 1).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: troc-service
+  labels:
+    app: troc-service
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: troc-service
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50

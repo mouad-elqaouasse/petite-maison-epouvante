@@ -1,4 +1,4 @@
-# troc-service — 1 replica (le HPA 1 → 3 arrive hors de la phase squelette, ADR 0005).
+# troc-service — 1 à 3 replicas par le HPA (hpa.yaml, ADR 0005) : pas de champ replicas, Flux le remettrait à sa valeur.
 # Ports : 8080 pour l'API (seul port cité par l'Ingress), 8081 pour l'actuator (sondes, métriques ; ADR 0007).
 apiVersion: apps/v1
 kind: Deployment
@@ -7,7 +7,6 @@ metadata:
   labels:
     app: troc-service
 spec:
-  replicas: 1
   revisionHistoryLimit: 3
   selector:
     matchLabels:
@@ -42,6 +41,9 @@ spec:
               containerPort: 8081
           # Base troc avec le rôle troc ; mot de passe lu dans le Secret troc-db (SQ-04, ADR 0008).
           env:
+            # Remplace la valeur de l'image : heap 173 Mio, environ 176 Mio hors heap mesurés le 24/11/2026, limite 384 Mio.
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:MaxRAMPercentage=45 -XX:+ExitOnOutOfMemoryError"
             - name: SPRING_DATASOURCE_URL
               value: jdbc:postgresql://postgresql:5432/troc
             - name: SPRING_DATASOURCE_USERNAME
@@ -83,10 +85,10 @@ spec:
                 secretKeyRef:
                   name: cloudinary
                   key: api-secret
-          # Budget RAM : 256 / 384 Mio (docs/cadrage.md §1.4.18) ; JVM à 75 % de la limite (Dockerfile).
+          # Budget RAM : 256 / 384 Mio (docs/cadrage.md §1.4.18) ; JVM à 45 % de la limite (JAVA_TOOL_OPTIONS ci-dessus).
           resources:
             requests:
-              cpu: 50m
+              cpu: 250m
               memory: 256Mi
             limits:
               cpu: 500m
