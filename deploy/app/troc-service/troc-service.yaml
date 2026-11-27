@@ -68,12 +68,8 @@ spec:
               value: https://auth.epouvante.menuly-app.com/realms/epouvante
             - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
               value: http://keycloak:8080/realms/epouvante/protocol/openid-connect/certs
-            # TEMPORAIRE, campagnes de charge (load/README.md, D6) : faux Cloudinary, aucune photo envoyée ni gardée.
-            # À retirer à la fin des campagnes : sans ce profil, la vraie implémentation revient.
-            - name: SPRING_PROFILES_ACTIVE
-              value: photo-factice
             # Photos sur Cloudinary (US1a, ADR 0021) : identifiants lus dans le Secret cloudinary, créé à la main par
-            # deploy/scripts/cloudinary-secrets.sh. Inutilisés tant que le profil photo-factice est actif.
+            # deploy/scripts/cloudinary-secrets.sh. Aucun profil actif : la fausse implémentation reste désactivée.
             - name: APP_CLOUDINARY_CLOUD_NAME
               valueFrom:
                 secretKeyRef:
